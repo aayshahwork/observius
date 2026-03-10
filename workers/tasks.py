@@ -15,11 +15,10 @@ import asyncio
 import hashlib
 import hmac
 import json
-import os
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 import redis as redis_lib
 from celery import Celery
@@ -109,7 +108,7 @@ def execute_task(self, task_id: str, task_config_json: str) -> None:
         )
         session.commit()
 
-        if result.rowcount == 0:
+        if result.rowcount == 0:  # type: ignore[attr-defined]
             logger.warning("Task %s already claimed or not queued, skipping", task_id)
             return
     except Exception:

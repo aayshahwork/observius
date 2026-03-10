@@ -127,7 +127,8 @@ class BrowserManager:
         """Create a Browserbase session and connect via CDP."""
         import aiohttp
 
-        headers = {
+        assert self.browserbase_api_key is not None
+        headers: dict[str, str] = {
             "x-bb-api-key": self.browserbase_api_key,
             "Content-Type": "application/json",
         }
@@ -166,7 +167,7 @@ class BrowserManager:
             async with aiohttp.ClientSession() as http:
                 async with http.delete(
                     f"{_BROWSERBASE_API_URL}/{self._session_id}",
-                    headers={"x-bb-api-key": self.browserbase_api_key},
+                    headers={"x-bb-api-key": self.browserbase_api_key or ""},
                     timeout=aiohttp.ClientTimeout(total=10),
                 ) as resp:
                     logger.info("Browserbase session %s released (HTTP %d)", self._session_id, resp.status)
