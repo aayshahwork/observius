@@ -24,7 +24,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install mypy -r api/requirements.txt -r workers/requirements.txt
+      - run: pip install mypy types-requests -r api/requirements.txt -r workers/requirements.txt
       - run: mypy api/ workers/ --ignore-missing-imports
 
   test-backend:
@@ -34,7 +34,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install pytest pytest-asyncio -r api/requirements.txt
+      - run: pip install pytest pytest-asyncio -r api/requirements.txt && pip install --no-deps -e sdk/
       - run: pytest tests/ -x -v
 
   test-frontend:

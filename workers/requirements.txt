@@ -6,3 +6,4 @@ browser-use
 structlog
 cryptography
 boto3
+requests
