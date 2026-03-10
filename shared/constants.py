@@ -17,6 +17,7 @@ class ErrorCode(StrEnum):
     INVALID_INPUT = "invalid_input"
     INTERNAL_ERROR = "internal_error"
     QUOTA_EXCEEDED = "quota_exceeded"
+    COST_LIMIT_EXCEEDED = "cost_limit_exceeded"
 
 
 # Tier limits: max concurrent tasks

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Task Replay — ComputerUse.dev</title>
+<style>/* __TAILWIND_CSS__ */</style>
+<style>
+  .timeline-item { transition: background-color 150ms; }
+  .timeline-item:hover { background-color: #e5e7eb; }
+  .timeline-item.active { background-color: #dbeafe; border-left: 3px solid #3b82f6; }
+  .viewport { background: #000; min-height: 400px; }
+  .viewport img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  .badge { display: inline-flex; padding: 2px 8px; border-radius: 9999px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+  .badge-ok { background: #dcfce7; color: #166534; }
+  .badge-err { background: #fee2e2; color: #991b1b; }
+  .badge-action { background: #e0e7ff; color: #3730a3; }
+  .nav-btn { padding: 8px 20px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; background: #3b82f6; color: #fff; }
+  .nav-btn:hover { background: #2563eb; }
+  .nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .detail-label { font-size: 0.7rem; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px; }
+  .detail-value { font-size: 0.875rem; color: #1f2937; }
+  .details-row { border-top: 1px solid #e5e7eb; padding-top: 0.5rem; margin-top: 0.5rem; }
+</style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<div class="max-w-screen-xl mx-auto p-4 flex flex-col gap-4" style="height:100vh">
+  <!-- Header -->
+  <div class="flex items-center justify-between bg-white rounded-lg shadow p-3">
+    <div class="flex items-center gap-3">
+      <span class="font-bold text-lg text-gray-700">Task Replay</span>
+      <span class="text-sm text-gray-500 font-mono" id="task-id"></span>
+    </div>
+    <span class="text-sm text-gray-500" id="step-counter">Step 1 / 1</span>
+  </div>
+
+  <!-- Main -->
+  <div class="flex gap-4 flex-1 overflow-hidden">
+    <!-- Timeline -->
+    <div class="flex flex-col bg-white rounded-lg shadow overflow-y-auto shrink-0" style="width:250px">
+      <div class="p-3 border-b font-semibold text-sm text-gray-600">Timeline</div>
+      <div class="flex-1 overflow-y-auto" id="timeline"></div>
+    </div>
+
+    <!-- Viewport + details -->
+    <div class="flex flex-col flex-1 gap-4 overflow-hidden">
+      <div class="flex-1 bg-white rounded-lg shadow overflow-hidden flex flex-col">
+        <div class="viewport flex-1 flex items-center justify-center overflow-y-auto" id="viewport">
+          <span class="text-gray-400">No screenshot</span>
+        </div>
+        <div class="flex items-center justify-center gap-3 p-3 border-b">
+          <button class="nav-btn" id="btn-prev" onclick="prev()">Prev</button>
+          <button class="nav-btn" id="btn-next" onclick="next()">Next</button>
+        </div>
+      </div>
+      <div class="bg-white rounded-lg shadow p-4 overflow-y-auto" style="max-height:200px" id="details"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+var replayData = "__REPLAY_DATA__";
+var cur = 0;
+var steps = replayData.steps || [];
+
+function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function renderTimeline() {
+  var el = document.getElementById('timeline');
+  el.innerHTML = '';
+  steps.forEach(function(s, i) {
+    var d = document.createElement('div');
+    d.className = 'timeline-item p-3 cursor-pointer select-none' + (i === cur ? ' active' : '');
+    d.onclick = function() { go(i); };
+    d.innerHTML =
+      '<div class="flex items-center justify-between mb-1">' +
+        '<span class="text-xs font-semibold text-gray-500">Step ' + s.step_number + '</span>' +
+        (s.success ? '<span class="badge badge-ok">OK</span>' : '<span class="badge badge-err">ERR</span>') +
+      '</div>' +
+      '<span class="badge badge-action">' + esc(s.action_type) + '</span>' +
+      '<div class="text-xs text-gray-600 truncate mt-1">' + esc(s.description || '') + '</div>';
+    el.appendChild(d);
+  });
+  document.getElementById('task-id').textContent = replayData.task_id || '';
+}
+
+function renderStep() {
+  if (!steps.length) return;
+  var s = steps[cur];
+  document.getElementById('step-counter').textContent = 'Step ' + (cur + 1) + ' / ' + steps.length;
+
+  var vp = document.getElementById('viewport');
+  vp.innerHTML = s.screenshot
+    ? '<img src="data:image/jpeg;base64,' + s.screenshot + '" alt="Step ' + s.step_number + '">'
+    : '<span class="text-gray-400">No screenshot</span>';
+
+  var h = '<div class="flex items-center gap-2 mb-2">' +
+    '<span class="badge badge-action">' + esc(s.action_type) + '</span>' +
+    (s.success ? '<span class="badge badge-ok">OK</span>' : '<span class="badge badge-err">Failed</span>') +
+    '</div>' +
+    '<div class="text-sm mb-2">' + esc(s.description || '') + '</div>';
+  if (s.error) h += '<div class="text-sm text-red-600 mb-2">' + esc(s.error) + '</div>';
+  h += '<div class="details-row flex gap-4">' +
+    '<div><div class="detail-label">Duration</div><div class="detail-value">' + (s.duration_ms || 0) + 'ms</div></div>' +
+    '<div><div class="detail-label">Tokens In</div><div class="detail-value">' + (s.tokens_in || 0) + '</div></div>' +
+    '<div><div class="detail-label">Tokens Out</div><div class="detail-value">' + (s.tokens_out || 0) + '</div></div>' +
+    '<div><div class="detail-label">Time</div><div class="detail-value font-mono text-xs">' + esc(s.timestamp || '') + '</div></div>' +
+    '</div>';
+  document.getElementById('details').innerHTML = h;
+
+  document.getElementById('btn-prev').disabled = cur === 0;
+  document.getElementById('btn-next').disabled = cur === steps.length - 1;
+
+  var items = document.querySelectorAll('.timeline-item');
+  items.forEach(function(el, i) { el.classList.toggle('active', i === cur); });
+  if (items[cur]) items[cur].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+function go(i) { cur = i; renderStep(); }
+function prev() { if (cur > 0) { cur--; renderStep(); } }
+function next() { if (cur < steps.length - 1) { cur++; renderStep(); } }
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); prev(); }
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); next(); }
+});
+
+renderTimeline();
+renderStep();
+</script>
+</body>
+</html>
