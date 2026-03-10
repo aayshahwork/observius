@@ -7,7 +7,7 @@ Uses plain dataclasses (not Pydantic) for lighter hot-path performance.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import StrEnum
 from typing import Any, Dict, List, Optional
 
