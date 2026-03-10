@@ -1,15 +1,13 @@
 """
-backend/tasks.py — Celery task definitions for async browser automation.
+workers/tasks.py — Celery task definitions for async browser automation.
 
 The Celery worker is started separately from the API server:
-    celery -A backend.tasks worker --loglevel=info --concurrency=4
+    celery -A workers.main worker --loglevel=info --concurrency=4
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
-import logging
 import os
 import time
 from datetime import datetime, timezone
@@ -21,7 +19,6 @@ from botocore.exceptions import BotoCoreError, ClientError
 from celery import Celery
 from celery.utils.log import get_task_logger
 
-from computeruse import ComputerUse
 from computeruse.executor import TaskExecutor
 from computeruse.models import TaskConfig
 
@@ -59,7 +56,7 @@ celery_app.conf.update(
 )
 
 # ---------------------------------------------------------------------------
-# Database helpers (stubs — replace with real async DB calls via backend/db.py)
+# Database helpers (stubs — replace with real async DB calls via shared/db.py)
 # ---------------------------------------------------------------------------
 
 def _db_update(task_id: str, fields: Dict[str, Any]) -> None:

@@ -1,5 +1,5 @@
 """
-backend/browser_provider.py — BrowserBase cloud browser session management.
+shared/browser_provider.py — BrowserBase cloud browser session management.
 
 Provides a high-level async interface to the BrowserBase REST API and
 Playwright CDP connection.

@@ -1,13 +1,13 @@
-from celery import Celery
+"""
+workers/main.py — Celery application entrypoint.
 
-from workers.config import worker_settings
+Start the worker:
+    celery -A workers.main worker --loglevel=info --concurrency=4
+"""
 
-celery_app = Celery(
-    "computeruse",
-    broker=worker_settings.REDIS_URL,
-    backend=worker_settings.REDIS_URL,
-)
+from workers.tasks import celery_app
 
+# Add tier-based queue routing on top of the base config from tasks.py
 celery_app.conf.update(
     task_queues={
         "tasks:free": {"exchange": "tasks", "routing_key": "free"},
@@ -15,9 +15,6 @@ celery_app.conf.update(
         "tasks:enterprise": {"exchange": "tasks", "routing_key": "enterprise"},
     },
     task_default_queue="tasks:free",
-    task_serializer="json",
-    result_serializer="json",
-    accept_content=["json"],
-    timezone="UTC",
-    enable_utc=True,
 )
+
+__all__ = ["celery_app"]

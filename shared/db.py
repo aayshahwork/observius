@@ -1,5 +1,5 @@
 """
-backend/db.py — Async PostgreSQL database layer using asyncpg.
+shared/db.py — Async PostgreSQL database layer using asyncpg.
 
 All public functions assume the connection pool has been initialised by
 calling :func:`init_db` at application startup.  Tear it down with

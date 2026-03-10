@@ -147,7 +147,7 @@ class TaskExecutor:
                 # ------------------------------------------------------ #
                 # 3. Agent execution                                       #
                 # ------------------------------------------------------ #
-                agent_result = await self.retry_handler.execute_with_timeout(
+                await self.retry_handler.execute_with_timeout(
                     self._execute_with_agent,
                     config.timeout_seconds,
                     browser,

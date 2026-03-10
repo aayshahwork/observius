@@ -1,5 +1,5 @@
 """
-backend/storage.py — Async S3 storage operations for replays and screenshots.
+shared/storage.py — Async S3 storage operations for replays and screenshots.
 
 All public functions are async and use aioboto3 so they integrate cleanly
 with FastAPI and the asyncio event loop used by the rest of the backend.
