@@ -1,0 +1,8 @@
+celery
+redis
+playwright
+anthropic
+browser-use
+structlog
+cryptography
+boto3
