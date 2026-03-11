@@ -107,31 +107,38 @@ class CaptchaSolver:
         page_url = page.url
 
         # Submit to 2Captcha
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                _IN_URL,
-                data={
-                    "key": self._api_key,
-                    "method": "userrecaptcha",
-                    "googlekey": sitekey,
-                    "pageurl": page_url,
-                    "json": "1",
-                },
-            ) as resp:
-                body = await resp.json(content_type=None)
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    _IN_URL,
+                    data={
+                        "key": self._api_key,
+                        "method": "userrecaptcha",
+                        "googlekey": sitekey,
+                        "pageurl": page_url,
+                        "json": "1",
+                    },
+                ) as resp:
+                    body = await resp.json(content_type=None)
 
-            if body.get("status") != 1:
-                return CaptchaResult(
-                    solved=False, captcha_type=captcha_type,
-                    error=body.get("request", "submit_failed"),
-                    duration_ms=int((time.monotonic() - start) * 1000),
-                )
+                if body.get("status") != 1:
+                    return CaptchaResult(
+                        solved=False, captcha_type=captcha_type,
+                        error=body.get("request", "submit_failed"),
+                        duration_ms=int((time.monotonic() - start) * 1000),
+                    )
 
-            task_id = body["request"]
-            logger.info("2captcha_submitted task_id=%s type=%s", task_id, captcha_type)
+                task_id = body["request"]
+                logger.info("2captcha_submitted task_id=%s type=%s", task_id, captcha_type)
 
-            # Poll for result
-            token = await self._poll_result(session, task_id)
+                # Poll for result
+                token = await self._poll_result(session, task_id)
+        except (aiohttp.ClientError, ValueError, KeyError) as exc:
+            return CaptchaResult(
+                solved=False, captcha_type=captcha_type,
+                error=f"request_failed:{exc}",
+                duration_ms=int((time.monotonic() - start) * 1000),
+            )
 
         elapsed = int((time.monotonic() - start) * 1000)
 
@@ -197,31 +204,38 @@ class CaptchaSolver:
         page_url = page.url
 
         # Submit to 2Captcha
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                _IN_URL,
-                data={
-                    "key": self._api_key,
-                    "method": "hcaptcha",
-                    "sitekey": sitekey,
-                    "pageurl": page_url,
-                    "json": "1",
-                },
-            ) as resp:
-                body = await resp.json(content_type=None)
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    _IN_URL,
+                    data={
+                        "key": self._api_key,
+                        "method": "hcaptcha",
+                        "sitekey": sitekey,
+                        "pageurl": page_url,
+                        "json": "1",
+                    },
+                ) as resp:
+                    body = await resp.json(content_type=None)
 
-            if body.get("status") != 1:
-                return CaptchaResult(
-                    solved=False, captcha_type=captcha_type,
-                    error=body.get("request", "submit_failed"),
-                    duration_ms=int((time.monotonic() - start) * 1000),
-                )
+                if body.get("status") != 1:
+                    return CaptchaResult(
+                        solved=False, captcha_type=captcha_type,
+                        error=body.get("request", "submit_failed"),
+                        duration_ms=int((time.monotonic() - start) * 1000),
+                    )
 
-            task_id = body["request"]
-            logger.info("2captcha_submitted task_id=%s type=%s", task_id, captcha_type)
+                task_id = body["request"]
+                logger.info("2captcha_submitted task_id=%s type=%s", task_id, captcha_type)
 
-            # Poll for result
-            token = await self._poll_result(session, task_id)
+                # Poll for result
+                token = await self._poll_result(session, task_id)
+        except (aiohttp.ClientError, ValueError, KeyError) as exc:
+            return CaptchaResult(
+                solved=False, captcha_type=captcha_type,
+                error=f"request_failed:{exc}",
+                duration_ms=int((time.monotonic() - start) * 1000),
+            )
 
         elapsed = int((time.monotonic() - start) * 1000)
 
@@ -304,12 +318,11 @@ class CaptchaSolver:
 
     async def _poll_result(self, session: aiohttp.ClientSession, task_id: str) -> Optional[str]:
         """Poll 2Captcha for result. Returns token, error string, or None on timeout."""
-        elapsed = 0.0
+        deadline = time.monotonic() + _POLL_MAX_WAIT_S
         # Initial delay — 2Captcha recommends waiting before first poll
         await asyncio.sleep(_POLL_INTERVAL_S)
-        elapsed += _POLL_INTERVAL_S
 
-        while elapsed < _POLL_MAX_WAIT_S:
+        while time.monotonic() < deadline:
             async with session.get(
                 _RES_URL,
                 params={"key": self._api_key, "action": "get", "id": task_id, "json": "1"},
@@ -323,7 +336,6 @@ class CaptchaSolver:
 
             if request_val == "CAPCHA_NOT_READY":
                 await asyncio.sleep(_POLL_INTERVAL_S)
-                elapsed += _POLL_INTERVAL_S
                 continue
 
             # Error response
@@ -332,6 +344,5 @@ class CaptchaSolver:
 
             # Unknown response — treat as not ready
             await asyncio.sleep(_POLL_INTERVAL_S)
-            elapsed += _POLL_INTERVAL_S
 
         return None  # Timeout

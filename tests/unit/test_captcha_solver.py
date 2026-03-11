@@ -6,9 +6,10 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import aiohttp
 import pytest
 
-from workers.captcha_solver import CaptchaResult, CaptchaSolver
+from workers.captcha_solver import CaptchaSolver
 
 
 @pytest.fixture
@@ -187,3 +188,142 @@ class TestSolveTurnstile:
         assert result.solved
         assert result.token == "turnstile-token-123"
         assert result.captcha_type == "turnstile"
+
+
+class TestPollResult:
+    @pytest.mark.asyncio
+    async def test_poll_uses_wall_clock_timeout(self, solver):
+        """_poll_result should respect wall-clock time, not just sleep duration."""
+        not_ready_response = AsyncMock()
+        not_ready_response.json = AsyncMock(
+            return_value={"status": 0, "request": "CAPCHA_NOT_READY"}
+        )
+
+        mock_session = AsyncMock()
+        mock_session.get = MagicMock(return_value=AsyncMock(
+            __aenter__=AsyncMock(return_value=not_ready_response),
+            __aexit__=AsyncMock(return_value=False),
+        ))
+
+        # Patch time.monotonic to simulate wall-clock progression past deadline
+        call_count = 0
+        base_time = 1000.0
+
+        def mock_monotonic():
+            nonlocal call_count
+            call_count += 1
+            # First call sets deadline (1000 + 120 = 1120)
+            # Second call after initial sleep: still under deadline
+            # Third call (in while condition after first poll): past deadline
+            if call_count <= 2:
+                return base_time
+            return base_time + 200.0  # Past the 120s deadline
+
+        with patch("workers.captcha_solver.time.monotonic", side_effect=mock_monotonic):
+            with patch("workers.captcha_solver.asyncio.sleep", new_callable=AsyncMock):
+                result = await solver._poll_result(mock_session, "task123")
+
+        assert result is None  # Should timeout
+
+    @pytest.mark.asyncio
+    async def test_poll_returns_token_on_success(self, solver):
+        """_poll_result returns the token when status == 1."""
+        success_response = AsyncMock()
+        success_response.json = AsyncMock(
+            return_value={"status": 1, "request": "solved-token-abc"}
+        )
+
+        mock_session = AsyncMock()
+        mock_session.get = MagicMock(return_value=AsyncMock(
+            __aenter__=AsyncMock(return_value=success_response),
+            __aexit__=AsyncMock(return_value=False),
+        ))
+
+        with patch("workers.captcha_solver.asyncio.sleep", new_callable=AsyncMock):
+            result = await solver._poll_result(mock_session, "task123")
+
+        assert result == "solved-token-abc"
+
+    @pytest.mark.asyncio
+    async def test_poll_returns_error_string(self, solver):
+        """_poll_result returns ERROR_ strings immediately."""
+        error_response = AsyncMock()
+        error_response.json = AsyncMock(
+            return_value={"status": 0, "request": "ERROR_CAPTCHA_UNSOLVABLE"}
+        )
+
+        mock_session = AsyncMock()
+        mock_session.get = MagicMock(return_value=AsyncMock(
+            __aenter__=AsyncMock(return_value=error_response),
+            __aexit__=AsyncMock(return_value=False),
+        ))
+
+        with patch("workers.captcha_solver.asyncio.sleep", new_callable=AsyncMock):
+            result = await solver._poll_result(mock_session, "task123")
+
+        assert result == "ERROR_CAPTCHA_UNSOLVABLE"
+
+
+class TestNetworkErrorHandling:
+    @pytest.mark.asyncio
+    async def test_solve_recaptcha_network_error(self, solver):
+        """_solve_recaptcha_v2 returns clean CaptchaResult on aiohttp failure."""
+        page = _mock_page("recaptcha_v2")
+        page.evaluate = AsyncMock(return_value="6LcTestSiteKey")
+        page.url = "https://example.com"
+
+        mock_session = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+        mock_session.post = MagicMock(side_effect=aiohttp.ClientError("Connection refused"))
+
+        with patch("workers.captcha_solver.aiohttp.ClientSession", return_value=mock_session):
+            result = await solver._solve_recaptcha_v2(page)
+
+        assert not result.solved
+        assert result.captcha_type == "recaptcha_v2"
+        assert "request_failed:" in result.error
+        assert result.duration_ms >= 0
+
+    @pytest.mark.asyncio
+    async def test_solve_hcaptcha_network_error(self, solver):
+        """_solve_hcaptcha returns clean CaptchaResult on aiohttp failure."""
+        page = _mock_page("hcaptcha")
+        page.evaluate = AsyncMock(return_value="hcaptcha-sitekey")
+        page.url = "https://example.com"
+
+        mock_session = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+        mock_session.post = MagicMock(side_effect=aiohttp.ClientError("Timeout"))
+
+        with patch("workers.captcha_solver.aiohttp.ClientSession", return_value=mock_session):
+            result = await solver._solve_hcaptcha(page)
+
+        assert not result.solved
+        assert result.captcha_type == "hcaptcha"
+        assert "request_failed:" in result.error
+
+    @pytest.mark.asyncio
+    async def test_solve_recaptcha_json_decode_error(self, solver):
+        """_solve_recaptcha_v2 handles non-JSON response gracefully."""
+        page = _mock_page("recaptcha_v2")
+        page.evaluate = AsyncMock(return_value="6LcTestSiteKey")
+        page.url = "https://example.com"
+
+        mock_response = AsyncMock()
+        mock_response.json = AsyncMock(side_effect=ValueError("Invalid JSON"))
+
+        mock_session = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+        mock_session.post = MagicMock(return_value=AsyncMock(
+            __aenter__=AsyncMock(return_value=mock_response),
+            __aexit__=AsyncMock(return_value=False),
+        ))
+
+        with patch("workers.captcha_solver.aiohttp.ClientSession", return_value=mock_session):
+            result = await solver._solve_recaptcha_v2(page)
+
+        assert not result.solved
+        assert "request_failed:" in result.error

@@ -92,3 +92,19 @@ class TestAuditLoggerLog:
             resource_id=str(uuid.uuid4()),
         )
         mock_db.commit.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_sql_uses_jsonb_cast(self, logger, mock_db):
+        """SQL should use CAST(:metadata AS jsonb) for explicit type binding."""
+        await logger.log(
+            account_id=uuid.uuid4(),
+            actor_type="user",
+            actor_id="user-1",
+            action=TASK_CREATED,
+            resource_type="task",
+            resource_id=str(uuid.uuid4()),
+            metadata={"key": "value"},
+        )
+        call_args = mock_db.execute.call_args
+        sql_text = str(call_args[0][0])
+        assert "CAST(:metadata AS jsonb)" in sql_text

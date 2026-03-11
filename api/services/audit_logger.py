@@ -49,7 +49,7 @@ class AuditLogger:
                 "INSERT INTO audit_log "
                 "(account_id, actor_type, actor_id, action, resource_type, resource_id, metadata, ip_address) "
                 "VALUES (:account_id, :actor_type, :actor_id, :action, :resource_type, :resource_id, "
-                ":metadata, :ip_address)"
+                "CAST(:metadata AS jsonb), :ip_address)"
             ),
             {
                 "account_id": str(account_id),
