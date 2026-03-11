@@ -14,7 +14,7 @@ import logging
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import urlparse
 
 from workers.browser_manager import BrowserManager
@@ -138,11 +138,15 @@ class TaskExecutor:
         browser_manager: BrowserManager,
         llm_client: Any,
         use_cloud: bool = False,
+        shutdown_check: Optional[Callable[[], bool]] = None,
+        step_data: Optional[List[StepData]] = None,
     ) -> None:
         self.config = config
         self.browser_manager = browser_manager
         self.llm_client = llm_client
         self.use_cloud = use_cloud
+        self.shutdown_check = shutdown_check
+        self._shared_step_data = step_data
 
     async def execute(self) -> TaskResult:
         """Execute the task end-to-end.
@@ -157,7 +161,9 @@ class TaskExecutor:
         """
         task_id = str(uuid.uuid4())
         start_time = time.monotonic()
-        steps: List[StepData] = []
+        # Use shared list if provided (allows shutdown handler to see
+        # accumulated steps for partial replay generation).
+        steps: List[StepData] = self._shared_step_data if self._shared_step_data is not None else []
         cumulative_cost_cents = 0.0
         browser = None
 
@@ -196,6 +202,11 @@ class TaskExecutor:
             messages: List[Dict[str, Any]] = []
 
             for step_num in range(2, self.config.max_steps + 1):
+                # Check for graceful shutdown
+                if self.shutdown_check and self.shutdown_check():
+                    logger.info("Shutdown detected, breaking agent loop at step %d", step_num)
+                    break
+
                 step_start = time.monotonic()
 
                 # a) Capture screenshot

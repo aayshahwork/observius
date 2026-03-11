@@ -1,4 +1,4 @@
-.PHONY: dev test lint typecheck build migrate
+.PHONY: dev test lint typecheck build migrate load-test
 
 dev:
 	docker compose up --build
@@ -20,3 +20,6 @@ build:
 
 migrate:
 	cd api && alembic upgrade head
+
+load-test:
+	pip install -r tests/load/requirements.txt && locust -f tests/load/locustfile.py --config tests/load/locust.conf

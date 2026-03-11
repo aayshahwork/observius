@@ -63,11 +63,27 @@ worker_utilization = Gauge(
     multiprocess_mode="liveall",
 )
 
+task_cost_cents = Histogram(
+    "celery_task_cost_cents",
+    "Task cost in cents",
+    ["task_name"],
+    buckets=[0.1, 0.5, 1, 5, 10, 50, 100, 500],
+)
+
 # ---------------------------------------------------------------------------
 # Task timing bookkeeping
 # ---------------------------------------------------------------------------
 
 _task_start_times: dict[str, float] = {}
+_task_metadata: dict[str, dict] = {}  # task_id -> {cost_cents, steps}
+
+
+def record_task_cost(task_id: str, cost_cents: float, steps: int) -> None:
+    """Store task cost/steps for retrieval in signal handlers.
+
+    Called from ``workers/tasks.py`` after execution completes.
+    """
+    _task_metadata[task_id] = {"cost_cents": cost_cents, "steps": steps}
 
 
 @signals.task_prerun.connect
@@ -80,17 +96,49 @@ def _on_task_success(sender=None, **kwargs):  # noqa: ARG001
     task_id = sender.request.id
     task_name = sender.name
     start = _task_start_times.pop(task_id, None)
+    duration = time.monotonic() - start if start is not None else 0.0
     if start is not None:
-        task_duration_seconds.labels(task_name=task_name).observe(time.monotonic() - start)
+        task_duration_seconds.labels(task_name=task_name).observe(duration)
     task_success_total.labels(task_name=task_name).inc()
+
+    # Record cost and canary observation
+    meta = _task_metadata.pop(task_id, None)
+    if meta:
+        task_cost_cents.labels(task_name=task_name).observe(meta["cost_cents"])
+        try:
+            from workers.canary import record_and_evaluate
+
+            record_and_evaluate(
+                duration_seconds=duration,
+                success=True,
+                cost_cents=meta["cost_cents"],
+                steps=meta["steps"],
+            )
+        except Exception:
+            pass
 
 
 @signals.task_failure.connect
 def _on_task_failure(sender=None, **kwargs):  # noqa: ARG001
     task_id = sender.request.id
     task_name = sender.name
-    _task_start_times.pop(task_id, None)
+    start = _task_start_times.pop(task_id, None)
+    duration = time.monotonic() - start if start is not None else 0.0
     task_failure_total.labels(task_name=task_name).inc()
+
+    # Record canary observation for failures too
+    meta = _task_metadata.pop(task_id, None)
+    try:
+        from workers.canary import record_and_evaluate
+
+        record_and_evaluate(
+            duration_seconds=duration,
+            success=False,
+            cost_cents=meta["cost_cents"] if meta else 0.0,
+            steps=meta["steps"] if meta else 0,
+        )
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -158,3 +206,6 @@ def _start_metrics_server(sender=None, **kwargs):  # noqa: ARG001
     # Queue depth poller (runs in main process, reads Redis directly)
     t2 = threading.Thread(target=_poll_queue_depth, daemon=True)
     t2.start()
+
+    # Canary evaluation runs inline in signal handlers (per-child process)
+    # to avoid cross-process data visibility issues with prefork pool.

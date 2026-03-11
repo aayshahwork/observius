@@ -131,6 +131,11 @@ def execute_task(self, task_id: str, task_config_json: str) -> None:
         from workers.browser_manager import BrowserManager
         from workers.executor import TaskExecutor
         from workers.models import TaskConfig, TaskResult
+        from workers.shutdown import (
+            deregister_in_flight,
+            is_shutting_down,
+            register_in_flight,
+        )
 
         config = TaskConfig(
             url=config_dict["url"],
@@ -150,14 +155,36 @@ def execute_task(self, task_id: str, task_config_json: str) -> None:
             browserbase_api_key=worker_settings.BROWSERBASE_API_KEY or None,
             browserbase_project_id=worker_settings.BROWSERBASE_PROJECT_ID or None,
         )
+
+        # Shared step list: executor appends to this, shutdown handler reads it
+        shared_steps: list = []
+
+        # Register for graceful shutdown tracking
+        register_in_flight(
+            task_id=task_id,
+            lock=lock,
+            browser_manager=browser_manager,
+            step_data=shared_steps,
+            config_json=task_config_json,
+        )
+
         executor = TaskExecutor(
             config=config,
             browser_manager=browser_manager,
             llm_client=llm_client,
             use_cloud=bool(worker_settings.BROWSERBASE_API_KEY),
+            shutdown_check=is_shutting_down,
+            step_data=shared_steps,
         )
 
         task_result: TaskResult = asyncio.run(executor.execute())
+
+        # Record cost for Prometheus metrics and canary tracking.
+        # Key by Celery task ID (self.request.id), not our application task_id,
+        # because signal handlers look up metadata by sender.request.id.
+        from workers.metrics import record_task_cost
+
+        record_task_cost(self.request.id, task_result.cost_cents, task_result.steps)
 
         # ── 4-7. Persist result ────────────────────────────────────────────
         _persist_result(task_id, task_result, config_dict)
@@ -166,6 +193,10 @@ def execute_task(self, task_id: str, task_config_json: str) -> None:
         logger.exception("Task %s failed with exception", task_id)
         _persist_failure(task_id, str(exc), config_dict)
     finally:
+        try:
+            deregister_in_flight(task_id)
+        except NameError:
+            pass  # shutdown module import failed earlier
         try:
             lock.release()
         except Exception:

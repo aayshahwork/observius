@@ -16,6 +16,11 @@ from workers.config import worker_settings
 from workers.tasks import celery_app  # Also registers execute_task and deliver_webhook
 
 import workers.metrics  # noqa: F401 — registers Celery signal handlers
+import workers.canary  # noqa: F401 — registers canary metric gauges
+
+from workers.shutdown import GracefulShutdownHandler
+
+GracefulShutdownHandler().register()
 
 # ---------------------------------------------------------------------------
 # Tier-based queue routing with visibility timeouts

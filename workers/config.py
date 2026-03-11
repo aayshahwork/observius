@@ -14,6 +14,7 @@ class WorkerSettings(BaseSettings):
     R2_ENDPOINT: str = ""
     TWOCAPTCHA_API_KEY: str = ""
     ENCRYPTION_MASTER_KEY: str = "change-me"
+    CANARY_DEPLOYMENT: bool = False
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 
