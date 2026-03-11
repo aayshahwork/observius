@@ -134,9 +134,30 @@ def client(test_account, mock_db, mock_redis):
 
 class TestHealthCheck:
     def test_health_returns_ok(self, client):
-        resp = client.get("/health")
+        from unittest.mock import patch
+
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock()
+        mock_session_ctx = AsyncMock()
+        mock_session_ctx.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session_ctx.__aexit__ = AsyncMock(return_value=False)
+
+        mock_redis = AsyncMock()
+        mock_redis.ping = AsyncMock(return_value=True)
+        mock_redis.aclose = AsyncMock()
+
+        with (
+            patch("api.db.engine.async_session_factory", return_value=mock_session_ctx),
+            patch("redis.asyncio.Redis.from_url", return_value=mock_redis),
+        ):
+            resp = client.get("/health")
+
         assert resp.status_code == 200
-        assert resp.json() == {"status": "ok"}
+        data = resp.json()
+        assert data["status"] == "ok"
+        assert data["db"] == "ok"
+        assert data["redis"] == "ok"
+        assert "version" in data
 
 
 # ---------------------------------------------------------------------------

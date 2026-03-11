@@ -11,9 +11,13 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from starlette.responses import Response
 
+from api.config import settings
 from api.middleware.credential_scrubber import CredentialScrubber
 from api.middleware.logging import StructuredLoggingMiddleware
+from api.middleware.metrics import PrometheusMiddleware
 from api.routes.account import router as account_router
 from api.routes.audit import router as audit_router
 from api.routes.billing import router as billing_router
@@ -23,6 +27,12 @@ from api.routes.tasks import router as tasks_router
 # ---------------------------------------------------------------------------
 # Structured logging configuration
 # ---------------------------------------------------------------------------
+
+_renderer = (
+    structlog.dev.ConsoleRenderer()
+    if settings.ENVIRONMENT == "development"
+    else structlog.processors.JSONRenderer()
+)
 
 structlog.configure(
     processors=[
@@ -35,7 +45,7 @@ structlog.configure(
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
         structlog.processors.UnicodeDecoder(),
-        structlog.dev.ConsoleRenderer(),
+        _renderer,
     ],
     wrapper_class=structlog.stdlib.BoundLogger,
     context_class=dict,
@@ -74,6 +84,7 @@ app.add_middleware(
 )
 
 app.add_middleware(StructuredLoggingMiddleware)
+app.add_middleware(PrometheusMiddleware)
 
 # ---------------------------------------------------------------------------
 # Routers
@@ -98,9 +109,53 @@ async def unhandled_exception_handler(request, exc: Exception) -> JSONResponse:
     )
 
 # ---------------------------------------------------------------------------
-# Health check (no auth)
+# Health check (no auth) — checks DB + Redis connectivity
 # ---------------------------------------------------------------------------
 
 @app.get("/health", tags=["Infrastructure"])
-async def health_check() -> dict:
-    return {"status": "ok"}
+async def health_check() -> Response:
+    from redis.asyncio import Redis
+    from sqlalchemy import text
+
+    from api.db.engine import async_session_factory
+
+    db_ok = False
+    redis_ok = False
+
+    try:
+        async with async_session_factory() as session:
+            await session.execute(text("SELECT 1"))
+        db_ok = True
+    except Exception:
+        pass
+
+    try:
+        client = Redis.from_url(settings.REDIS_URL, decode_responses=True)
+        try:
+            await client.ping()  # type: ignore[misc]
+            redis_ok = True
+        finally:
+            await client.aclose()
+    except Exception:
+        pass
+
+    status = "ok" if (db_ok and redis_ok) else "degraded"
+    status_code = 200 if (db_ok or redis_ok) else 503
+
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "status": status,
+            "db": "ok" if db_ok else "unavailable",
+            "redis": "ok" if redis_ok else "unavailable",
+            "version": app.version,
+        },
+    )
+
+# ---------------------------------------------------------------------------
+# Prometheus metrics endpoint (no auth)
+# ---------------------------------------------------------------------------
+
+@app.get("/metrics", tags=["Infrastructure"], include_in_schema=False)
+async def prometheus_metrics() -> Response:
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)

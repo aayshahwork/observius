@@ -9,3 +9,4 @@ boto3
 requests
 sqlalchemy
 psycopg2-binary
+prometheus_client

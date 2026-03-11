@@ -1,11 +1,28 @@
+# ---- Builder stage ----
+FROM python:3.11-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+COPY workers/requirements.txt ./
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+# ---- Runtime stage ----
 FROM python:3.11-slim
 
+COPY --from=builder /install /usr/local
+
+# Install Playwright's Chromium and its system-level dependencies
+RUN playwright install --with-deps chromium
+
 WORKDIR /app
-
-COPY workers/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
-
 COPY workers/ ./workers/
 COPY shared/ ./shared/
+# Workers import api.models, api.config, api.db, api.services at runtime
+COPY api/ ./api/
 
-CMD ["celery", "-A", "workers.main", "worker", "--loglevel=info"]
+ENV PYTHONPATH=/app \
+    PYTHONUNBUFFERED=1
+
+CMD ["celery", "-A", "workers.main", "worker", "--loglevel=info", "--pool=prefork", "--concurrency=2"]

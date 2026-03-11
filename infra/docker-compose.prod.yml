@@ -1,0 +1,65 @@
+version: "3.9"
+
+# Production compose — application services only.
+# PostgreSQL (Supabase) and Redis (Upstash) are managed externally.
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.api
+    ports:
+      - "8000:8000"
+    env_file: ../.env
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  worker:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.worker
+    env_file: ../.env
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+        reservations:
+          cpus: "1.0"
+          memory: 1G
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: ../dashboard
+      dockerfile: ../infra/Dockerfile.dashboard
+    ports:
+      - "3000:3000"
+    env_file: ../.env
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

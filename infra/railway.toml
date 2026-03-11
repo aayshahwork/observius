@@ -1,0 +1,24 @@
+# Railway deployment configuration for the API service (primary).
+#
+# Railway uses one railway.toml per service. For the monorepo, create
+# separate Railway services in the dashboard and set each service's
+# root directory or Dockerfile path:
+#
+#   api:          infra/Dockerfile.api       (this config)
+#   worker:       infra/Dockerfile.worker    (configure in dashboard)
+#   dashboard:    infra/Dockerfile.dashboard  (configure in dashboard)
+#   usage-reset:  infra/Dockerfile.api + cron (configure in dashboard)
+#                 Start command: python -m api.management.reset_usage
+#                 Cron schedule: 0 0 1 * *
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "infra/Dockerfile.api"
+watchPatterns = ["api/**", "shared/**"]
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 5
+numReplicas = 2
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5

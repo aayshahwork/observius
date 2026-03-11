@@ -2,6 +2,7 @@ from pydantic_settings import BaseSettings
 
 
 class WorkerSettings(BaseSettings):
+    ENVIRONMENT: str = "development"
     REDIS_URL: str = "redis://localhost:6379/0"
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/computeruse"
     ANTHROPIC_API_KEY: str = ""
