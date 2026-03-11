@@ -10,3 +10,5 @@ httpx
 stripe
 boto3
 prometheus_client
+# Minimum versions to fix known CVEs in transitive deps
+authlib>=1.6.7
