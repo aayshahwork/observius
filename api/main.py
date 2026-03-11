@@ -14,6 +14,8 @@ from fastapi.responses import JSONResponse
 
 from api.middleware.credential_scrubber import CredentialScrubber
 from api.middleware.logging import StructuredLoggingMiddleware
+from api.routes.account import router as account_router
+from api.routes.billing import router as billing_router
 from api.routes.sessions import router as sessions_router
 from api.routes.tasks import router as tasks_router
 
@@ -78,6 +80,8 @@ app.add_middleware(StructuredLoggingMiddleware)
 
 app.include_router(tasks_router)
 app.include_router(sessions_router)
+app.include_router(billing_router)
+app.include_router(account_router)
 
 # ---------------------------------------------------------------------------
 # Global exception handler

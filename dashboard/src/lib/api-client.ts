@@ -7,6 +7,11 @@ import type {
   ReplayResponse,
   ErrorResponse,
   UsageResponse,
+  BillingUsageResponse,
+  CheckoutResponse,
+  PortalResponse,
+  ApiKeyResponse,
+  ApiKeyCreateResponse,
 } from "./types";
 
 export class ApiError extends Error {
@@ -152,6 +157,50 @@ export class ApiClient {
       }
       throw error;
     }
+  }
+
+  // Billing
+  async getBillingUsage(): Promise<BillingUsageResponse> {
+    return apiCall<BillingUsageResponse>("/api/v1/billing/usage", {
+      headers: this.headers,
+    });
+  }
+
+  async createCheckout(tier: string): Promise<CheckoutResponse> {
+    return apiCall<CheckoutResponse>("/api/v1/billing/checkout", {
+      method: "POST",
+      body: { tier },
+      headers: this.headers,
+    });
+  }
+
+  async createPortal(): Promise<PortalResponse> {
+    return apiCall<PortalResponse>("/api/v1/billing/portal", {
+      method: "POST",
+      headers: this.headers,
+    });
+  }
+
+  // API Keys
+  async listApiKeys(): Promise<ApiKeyResponse[]> {
+    return apiCall<ApiKeyResponse[]>("/api/v1/account/api-keys", {
+      headers: this.headers,
+    });
+  }
+
+  async createApiKey(label?: string): Promise<ApiKeyCreateResponse> {
+    return apiCall<ApiKeyCreateResponse>("/api/v1/account/api-keys", {
+      method: "POST",
+      body: { label },
+      headers: this.headers,
+    });
+  }
+
+  async revokeApiKey(keyId: string): Promise<{ key_id: string; status: string }> {
+    return apiCall(`/api/v1/account/api-keys/${keyId}`, {
+      method: "DELETE",
+      headers: this.headers,
+    });
   }
 
   // Validate API key by attempting to list tasks

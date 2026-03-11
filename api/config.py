@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     # Stripe
     STRIPE_SECRET_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
+    STRIPE_PRICE_IDS: dict[str, str] = {
+        "startup": "",
+        "growth": "",
+        "enterprise": "",
+    }
 
     # Security
     API_SECRET_KEY: str = "change-me"

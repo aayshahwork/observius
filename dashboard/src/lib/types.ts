@@ -63,3 +63,41 @@ export interface UsageResponse {
   tier: string;
   daily_usage?: { date: string; steps: number }[];
 }
+
+// Billing
+
+export interface BillingUsageResponse {
+  monthly_steps_used: number;
+  monthly_step_limit: number;
+  tier: string;
+  billing_period_end: string | null;
+}
+
+export interface CheckoutResponse {
+  checkout_url: string;
+}
+
+export interface PortalResponse {
+  portal_url: string;
+}
+
+// API Keys
+
+export interface ApiKeyResponse {
+  id: string;
+  key_prefix: string;
+  key_suffix: string;
+  label: string | null;
+  created_at: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+}
+
+export interface ApiKeyCreateResponse {
+  id: string;
+  key: string;
+  key_prefix: string;
+  key_suffix: string;
+  label: string | null;
+  created_at: string;
+}
