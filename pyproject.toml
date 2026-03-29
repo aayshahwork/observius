@@ -17,6 +17,10 @@ line-length = 120
 "tests/conftest.py" = ["E402"]
 "tests/unit/test_models.py" = ["E402"]
 
+[tool.black]
+target-version = ["py311"]
+line-length = 120
+
 [tool.mypy]
 python_version = "3.11"
 ignore_missing_imports = true

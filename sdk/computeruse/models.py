@@ -120,9 +120,7 @@ def _pydantic_aware_dict_factory(items: list[tuple[str, Any]]) -> Dict[str, Any]
         if isinstance(value, BaseModel):
             result[key] = value.model_dump()
         elif isinstance(value, list):
-            result[key] = [
-                v.model_dump() if isinstance(v, BaseModel) else v for v in value
-            ]
+            result[key] = [v.model_dump() if isinstance(v, BaseModel) else v for v in value]
         else:
             result[key] = value
     return result
@@ -302,10 +300,7 @@ class SessionData(BaseModel):
 
     domain: str = Field(
         ...,
-        description=(
-            "Origin or hostname this session belongs to, "
-            "e.g. 'https://example.com' or 'example.com'"
-        ),
+        description=("Origin or hostname this session belongs to, " "e.g. 'https://example.com' or 'example.com'"),
     )
     cookies: List[Dict[str, Any]] = Field(
         default_factory=list,

@@ -177,9 +177,7 @@ class SessionManager:
             return True
 
         except (json.JSONDecodeError, KeyError) as exc:
-            raise SessionError(
-                f"Session file for '{domain}' is corrupt or malformed: {exc}"
-            ) from exc
+            raise SessionError(f"Session file for '{domain}' is corrupt or malformed: {exc}") from exc
         except SessionError:
             raise
         except Exception as exc:
@@ -230,9 +228,7 @@ class SessionManager:
             logger.info("Session deleted for '%s'", domain)
             return True
         except OSError as exc:
-            raise SessionError(
-                f"Could not delete session file for '{domain}': {exc}"
-            ) from exc
+            raise SessionError(f"Could not delete session file for '{domain}': {exc}") from exc
 
     # ------------------------------------------------------------------
     # Private helpers
