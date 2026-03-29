@@ -11,7 +11,9 @@ from computeruse.exceptions import ValidationError
 # ---------------------------------------------------------------------------
 
 # All recognised leaf type tokens (case-insensitive during parsing).
-_SCALAR_TYPES: frozenset[str] = frozenset({"str", "int", "float", "bool", "list", "dict"})
+_SCALAR_TYPES: frozenset[str] = frozenset(
+    {"str", "int", "float", "bool", "list", "dict"}
+)
 
 # Extracts the outer type name and the bracket contents from a parameterised
 # type expression such as "list[str]" or "dict[str, int]".
@@ -28,6 +30,7 @@ _BARE_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
 # ---------------------------------------------------------------------------
 # OutputValidator
 # ---------------------------------------------------------------------------
+
 
 class OutputValidator:
     """Validates and coerces LLM task output against a caller-supplied schema.
@@ -256,8 +259,12 @@ class OutputValidator:
 
         # --- Unparameterised / bare types ----------------------------------
         target_map: dict[str, type] = {
-            "str": str, "int": int, "float": float,
-            "bool": bool, "list": list, "dict": dict,
+            "str": str,
+            "int": int,
+            "float": float,
+            "bool": bool,
+            "list": list,
+            "dict": dict,
         }
         target = target_map[outer]
 
@@ -440,6 +447,7 @@ class OutputValidator:
 # instantiating OutputValidator)
 # ---------------------------------------------------------------------------
 
+
 def _coerce_bool(value: Any) -> bool:
     """Convert *value* to ``bool`` with strict literal matching.
 
@@ -484,10 +492,7 @@ def _coerce_int(value: Any) -> int:
         ValueError: For non-numeric strings or floats with a fractional part.
     """
     if isinstance(value, bool):
-        raise TypeError(
-            f"Cannot use bool {value!r} as int. "
-            "Use 0 or 1 explicitly."
-        )
+        raise TypeError(f"Cannot use bool {value!r} as int. " "Use 0 or 1 explicitly.")
     if isinstance(value, float):
         if not value.is_integer():
             raise ValueError(
@@ -506,8 +511,7 @@ def _coerce_float(value: Any) -> float:
     """
     if isinstance(value, bool):
         raise TypeError(
-            f"Cannot use bool {value!r} as float. "
-            "Use 0.0 or 1.0 explicitly."
+            f"Cannot use bool {value!r} as float. " "Use 0.0 or 1.0 explicitly."
         )
     return float(value)
 
@@ -555,7 +559,7 @@ def _coerce_bare_dict(value: Any) -> dict:
             pass
         raise ValueError(
             f"String {value!r} cannot be parsed as a JSON object. "
-            "Expected a value like '{\"key\": \"val\"}'."
+            'Expected a value like \'{"key": "val"}\'.'
         )
     raise TypeError(
         f"Expected a dict or JSON object string, got {type(value).__name__!r}."

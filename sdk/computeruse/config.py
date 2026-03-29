@@ -1,12 +1,25 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Optional
 
+from dotenv import load_dotenv as _load_dotenv
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
+
+# sdk/computeruse/ → sdk/ → repo root
+_SDK_DIR = Path(__file__).parent.parent
+_REPO_ROOT = _SDK_DIR.parent
+
+# Force-load .env files before pydantic-settings reads env vars.
+# override=True ensures .env values win over any ambient ANTHROPIC_API_KEY
+# already set in the process (e.g. by Claude Code's subprocess runner).
+# These are no-ops if the files don't exist.
+_load_dotenv(_REPO_ROOT / ".env", override=True)
+_load_dotenv(_SDK_DIR / ".env", override=True)  # sdk/.env wins if both exist
 
 
 class Settings(BaseSettings):
@@ -37,7 +50,7 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(_SDK_DIR / ".env", _REPO_ROOT / ".env"),
         env_file_encoding="utf-8",
         # Variable names are matched case-sensitively so ANTHROPIC_API_KEY and
         # anthropic_api_key are treated as different variables.

@@ -57,9 +57,7 @@ class BrowserManager:
                                  ``settings.BROWSERBASE_API_KEY`` when ``None``.
         """
         self.headless = headless
-        self.browserbase_api_key = (
-            browserbase_api_key or settings.BROWSERBASE_API_KEY
-        )
+        self.browserbase_api_key = browserbase_api_key or settings.BROWSERBASE_API_KEY
         # Holds the Playwright manager so it can be stopped on close.
         self._playwright: Optional[Playwright] = None
 
@@ -304,9 +302,7 @@ class BrowserManager:
 
         try:
             browser = await playwright.chromium.connect_over_cdp(ws_endpoint)
-            logger.info(
-                "Connected to BrowserBase session %s", session["session_id"]
-            )
+            logger.info("Connected to BrowserBase session %s", session["session_id"])
         except Exception as exc:
             raise BrowserError(
                 f"Could not connect to BrowserBase endpoint '{ws_endpoint}': {exc}"

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import sys
 import types
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 
 def _stub(name: str, **attrs: object) -> types.ModuleType:
@@ -36,7 +36,11 @@ _anthropic.Anthropic = MagicMock  # type: ignore[attr-defined]
 
 # browser_use ────────────────────────────────────────────────────────────────
 _browser_use = _stub("browser_use")
-_browser_use.Agent = MagicMock  # type: ignore[attr-defined]
+_agent_instance = MagicMock()
+_agent_instance.run = AsyncMock(return_value=MagicMock())
+_browser_use.Agent = MagicMock(return_value=_agent_instance)  # type: ignore[attr-defined]
+_browser_use.Browser = MagicMock        # type: ignore[attr-defined]
+_browser_use.BrowserProfile = MagicMock # type: ignore[attr-defined]
 
 _bu_browser = _stub("browser_use.browser")
 _bu_browser_browser = _stub(
@@ -44,6 +48,7 @@ _bu_browser_browser = _stub(
     Browser=MagicMock,
     BrowserConfig=MagicMock,
 )
+_stub("browser_use.llm", ChatAnthropic=MagicMock)
 
 # langchain_anthropic ────────────────────────────────────────────────────────
 _lca = _stub("langchain_anthropic")

@@ -260,6 +260,7 @@ class SessionManager:
 # Module-level helpers
 # ---------------------------------------------------------------------------
 
+
 def _sanitize_domain(domain: str) -> str:
     """Convert *domain* to a filesystem-safe filename stem.
 

@@ -44,5 +44,20 @@ out/
 .DS_Store
 Thumbs.db
 
-# Tasks
+# Tasks (Claude Code internal + user task tracking)
 tasks/
+.tasks/
+
+# SDK runtime output
+replays/
+sessions/
+*.egg-info/
+competitor_report.json
+intel_report.json
+
+# Scratch / dev scripts (local only)
+cleanup_supabase.py
+demo_interactive.py
+demo_short.py
+test_demo.py
+sdk/run_demo.py

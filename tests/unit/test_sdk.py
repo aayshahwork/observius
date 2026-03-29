@@ -357,8 +357,9 @@ class TestEdgeCases:
 
 
 class TestPollRetry:
+    @patch("computeruse.client.asyncio.sleep", new_callable=AsyncMock)
     @patch("computeruse.client.httpx.AsyncClient")
-    def test_retries_10_times_then_raises_network_error(self, mock_client_cls):
+    def test_retries_10_times_then_raises_network_error(self, mock_client_cls, mock_sleep):
         """Mock httpx.AsyncClient.get to raise ConnectError.
 
         Assert .get called exactly 10 times, final exception is NetworkError.

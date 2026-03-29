@@ -55,7 +55,9 @@ def cli() -> None:
 
 @cli.command()
 @click.option("--url", required=True, help="Starting URL for the task.")
-@click.option("--task", required=True, help="Natural-language description of what to do.")
+@click.option(
+    "--task", required=True, help="Natural-language description of what to do."
+)
 @click.option(
     "--username",
     default=None,
@@ -134,7 +136,9 @@ def run(
         try:
             output_schema = json.loads(schema)
             if not isinstance(output_schema, dict):
-                raise ValueError("Schema must be a JSON object, not an array or scalar.")
+                raise ValueError(
+                    "Schema must be a JSON object, not an array or scalar."
+                )
         except (json.JSONDecodeError, ValueError) as exc:
             err_console.print(f"[bold red]Invalid --schema:[/bold red] {exc}")
             err_console.print(
@@ -165,7 +169,9 @@ def run(
         "[dim]Browser[/dim]",
         "[yellow]visible[/yellow]" if no_headless else "headless",
     )
-    console.print(Panel(summary, title="[bold]ComputerUse Task[/bold]", border_style="blue"))
+    console.print(
+        Panel(summary, title="[bold]ComputerUse Task[/bold]", border_style="blue")
+    )
 
     # ── Execute ──────────────────────────────────────────────────────────────
     cu = ComputerUse(headless=not no_headless)
@@ -291,7 +297,9 @@ def sessions(delete_domain: Optional[str], session_dir: str) -> None:
         return
 
     table = Table(
-        "#", "Domain", "Session File",
+        "#",
+        "Domain",
+        "Session File",
         title=f"Saved Sessions  [dim]({session_dir})[/dim]",
         box=box.ROUNDED,
         header_style="bold cyan",
@@ -301,7 +309,9 @@ def sessions(delete_domain: Optional[str], session_dir: str) -> None:
     for i, domain in enumerate(domain_list, start=1):
         # SessionManager sanitises the domain for the filename; reconstruct the
         # expected path for display only — the manager handles the real lookup.
-        session_files = list(Path(session_dir).glob("*.json")) if Path(session_dir).exists() else []
+        session_files = (
+            list(Path(session_dir).glob("*.json")) if Path(session_dir).exists() else []
+        )
         # Find the first file whose stored domain matches.
         file_display = "[dim](unknown)[/dim]"
         for sf in session_files:
@@ -371,7 +381,8 @@ def _print_result(result) -> None:  # type: ignore[no-untyped-def]
     # Pretty-print extracted data when a schema was used.
     if result.result:
         data_table = Table(
-            "Field", "Value",
+            "Field",
+            "Value",
             box=box.SIMPLE_HEAVY,
             header_style="bold cyan",
             show_lines=False,

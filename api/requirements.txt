@@ -1,4 +1,5 @@
 fastapi
+starlette<0.48.0
 uvicorn
 sqlalchemy[asyncio]
 asyncpg

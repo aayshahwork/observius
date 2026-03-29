@@ -109,7 +109,9 @@ class RetryHandler:
                 last_error = exc
 
                 if not self.is_retryable_error(exc):
-                    logger.debug("Non-retryable error — propagating immediately: %s", exc)
+                    logger.debug(
+                        "Non-retryable error — propagating immediately: %s", exc
+                    )
                     raise
 
                 delay = self._backoff_delay(attempt)
@@ -245,4 +247,4 @@ class RetryHandler:
         Returns:
             Seconds to wait before the next attempt.
         """
-        return min(self.base_delay * (self.backoff_factor ** attempt), self.max_delay)
+        return min(self.base_delay * (self.backoff_factor**attempt), self.max_delay)

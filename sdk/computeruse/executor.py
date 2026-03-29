@@ -9,9 +9,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from anthropic import Anthropic
-from browser_use import Agent
-from browser_use.browser.browser import Browser, BrowserConfig
-from langchain_anthropic import ChatAnthropic
+from browser_use import Agent, Browser, BrowserProfile
+from browser_use.llm import ChatAnthropic
 from playwright.async_api import Page
 from rich.console import Console
 
@@ -48,7 +47,7 @@ class TaskExecutor:
     def __init__(
         self,
         model: str = "claude-sonnet-4-5",
-        headless: bool = True,
+        headless: bool = False,
         browserbase_api_key: Optional[str] = None,
     ) -> None:
         """
@@ -84,16 +83,9 @@ class TaskExecutor:
     async def execute(self, config: TaskConfig) -> TaskResult:
         """Execute a browser automation task end-to-end.
 
-        Orchestrates the full task lifecycle:
-
-        1. Set up the browser (local or cloud).
-        2. Restore a saved session for the target domain (if credentials are
-           provided and a previous session exists).
-        3. Navigate to ``config.url``.
-        4. Run the Browser Use agent with a crafted prompt.
-        5. Optionally extract and validate structured output.
-        6. Persist the session for future runs.
-        7. Generate a replay artifact.
+        The Agent manages the browser context internally — no manual context
+        creation is needed.  Structured output is extracted from the agent's
+        browser session text after the run completes.
 
         Args:
             config: Task configuration including URL, task description, optional
@@ -115,83 +107,104 @@ class TaskExecutor:
         console.log(f"[cyan]URL:[/]  {config.url}")
         console.log(f"[cyan]Task:[/] {config.task}")
 
-        browser: Optional[Browser] = None
-
         try:
-            # ---------------------------------------------------------- #
-            # 1. Browser setup                                             #
-            # ---------------------------------------------------------- #
+            # Build prompt
+            prompt = self._build_task_prompt(config)
+
+            # Set up LLM
+            llm = ChatAnthropic(
+                model=self.model,
+                api_key=settings.ANTHROPIC_API_KEY,
+                timeout=60,
+            )
+
+            # Create browser
             browser = Browser(
-                config=BrowserConfig(
-                    headless=self.headless,
-                    cdp_url=None,
+                browser_profile=BrowserProfile(
+                    headless=False,
                 )
             )
 
-            # ---------------------------------------------------------- #
-            # 2. Session restore + navigation                              #
-            # ---------------------------------------------------------- #
-            async with await browser.new_context() as context:
-                page: Page = await context.new_page()
+            # Run agent — it manages browser context internally
+            agent = Agent(
+                task=prompt,
+                llm=llm,
+                browser=browser,
+                use_vision=False,  # use DOM text instead of screenshots
+                max_actions_per_step=10,  # more actions per LLM call
+            )
 
-                if config.credentials:
-                    restored = await self.session_manager.load_session(
-                        page, config.url
-                    )
-                    if restored:
-                        console.log("[green]Session restored from cache[/]")
+            await agent.run(max_steps=config.max_steps)
 
-                await page.goto(config.url, wait_until="domcontentloaded")
-                console.log(f"[dim]Navigated to {config.url}[/]")
+            # --- Extract step count from agent history ---
+            step_count = 0
+            if hasattr(agent, "history") and hasattr(agent.history, "history"):
+                step_count = len(agent.history.history)
+                print(f"[steps] agent.history.history → {step_count}")
+            elif hasattr(agent, "state") and hasattr(agent.state, "history"):
+                step_count = len(agent.state.history)
+                print(f"[steps] agent.state.history → {step_count}")
+            elif hasattr(agent, "n_steps"):
+                step_count = agent.n_steps
+                print(f"[steps] agent.n_steps → {step_count}")
+            elif hasattr(agent, "history"):
+                try:
+                    step_count = len(agent.history)
+                    print(f"[steps] len(agent.history) → {step_count}")
+                except Exception:
+                    pass
 
-                # ------------------------------------------------------ #
-                # 3. Agent execution                                       #
-                # ------------------------------------------------------ #
-                await self.retry_handler.execute_with_timeout(
-                    self._execute_with_agent,
-                    config.timeout_seconds,
-                    browser,
-                    config,
+            # --- Extract result text from agent final state ---
+            agent_result_text = ""
+            if (
+                hasattr(agent, "state")
+                and hasattr(agent.state, "result")
+                and agent.state.result
+            ):
+                agent_result_text = str(agent.state.result)
+                print("[result] agent.state.result")
+            elif hasattr(agent, "history") and hasattr(agent.history, "final_result"):
+                try:
+                    fr = agent.history.final_result()
+                    if fr:
+                        agent_result_text = str(fr)
+                        print("[result] agent.history.final_result()")
+                except Exception:
+                    pass
+            if (
+                not agent_result_text
+                and hasattr(agent, "history")
+                and hasattr(agent.history, "history")
+                and agent.history.history
+            ):
+                agent_result_text = str(agent.history.history[-1])
+                print("[result] last item in agent.history.history")
+
+            # Extract structured output if schema provided
+            extracted: Dict[str, Any] = {}
+            if config.output_schema:
+                raw = await self._extract_output_from_text(
+                    agent_result_text or str(agent), config.output_schema
                 )
+                extracted = self.validator.validate_output(raw, config.output_schema)
+                console.log(f"[green]Output validated:[/] {list(extracted.keys())}")
 
-                # ------------------------------------------------------ #
-                # 4. Structured output extraction + validation             #
-                # ------------------------------------------------------ #
-                extracted: Dict[str, Any] = {}
-                if config.output_schema:
-                    raw = await self._extract_output(page, config.output_schema)
-                    extracted = self.validator.validate_output(
-                        raw, config.output_schema
-                    )
-                    console.log(
-                        f"[green]Output validated:[/] {list(extracted.keys())}"
-                    )
-
-                # ------------------------------------------------------ #
-                # 5. Session persistence                                   #
-                # ------------------------------------------------------ #
-                if config.credentials:
-                    await self.session_manager.save_session(page, config.url)
-                    console.log("[dim]Session saved[/]")
-
-            # ---------------------------------------------------------- #
-            # 6. Replay generation                                         #
-            # ---------------------------------------------------------- #
             replay_path = self._generate_replay(task_id, self.steps)
             duration_ms = int((time.monotonic() - start_time) * 1000)
 
             console.log(
                 f"[bold green]Task completed[/] in {duration_ms / 1000:.2f}s "
-                f"({len(self.steps)} steps)"
+                f"({step_count} steps)"
             )
 
             return TaskResult(
                 task_id=task_id,
                 status="completed",
                 success=True,
-                result=extracted or None,
+                result=extracted
+                or ({"text": agent_result_text} if agent_result_text else None),
                 replay_path=replay_path,
-                steps=len(self.steps),
+                steps=step_count,
                 duration_ms=duration_ms,
                 created_at=created_at,
                 completed_at=datetime.now(timezone.utc),
@@ -199,30 +212,19 @@ class TaskExecutor:
 
         except ValidationError as exc:
             return self._failed_result(task_id, created_at, start_time, str(exc))
-
         except TaskExecutionError as exc:
             return self._failed_result(task_id, created_at, start_time, str(exc))
-
         except Exception as exc:
             logger.exception("Unexpected error during task %s", task_id)
             return self._failed_result(
                 task_id, created_at, start_time, f"Unexpected error: {exc}"
             )
 
-        finally:
-            if browser is not None:
-                try:
-                    await browser.close()
-                except Exception as exc:
-                    logger.warning("Error closing browser after task: %s", exc)
-
     # ------------------------------------------------------------------
     # Private: agent execution
     # ------------------------------------------------------------------
 
-    async def _execute_with_agent(
-        self, browser: Browser, config: TaskConfig
-    ) -> Any:
+    async def _execute_with_agent(self, browser: Browser, config: TaskConfig) -> Any:
         """Initialise and run a Browser Use :class:`Agent` for *config*.
 
         Builds the task prompt, wires up the step callback, and delegates
@@ -261,9 +263,7 @@ class TaskExecutor:
             result = await agent.run(max_steps=config.max_steps)
             return result
         except Exception as exc:
-            raise TaskExecutionError(
-                f"Browser Use agent failed: {exc}"
-            ) from exc
+            raise TaskExecutionError(f"Browser Use agent failed: {exc}") from exc
 
     # ------------------------------------------------------------------
     # Private: prompt building
@@ -289,9 +289,7 @@ class TaskExecutor:
         ]
 
         if config.credentials:
-            cred_lines = "\n".join(
-                f"  {k}: {v}" for k, v in config.credentials.items()
-            )
+            cred_lines = "\n".join(f"  {k}: {v}" for k, v in config.credentials.items())
             sections.append(f"CREDENTIALS (use exactly as provided):\n{cred_lines}")
 
         if config.output_schema:
@@ -345,9 +343,7 @@ class TaskExecutor:
         schema_str = self.validator.format_schema(schema)
 
         try:
-            page_text = await page.evaluate(
-                "() => document.body.innerText"
-            )
+            page_text = await page.evaluate("() => document.body.innerText")
         except Exception as exc:
             logger.warning("Could not read page text for extraction: %s", exc)
             page_text = "(page text unavailable)"
@@ -370,10 +366,52 @@ class TaskExecutor:
             )
             response_text: str = message.content[0].text
         except Exception as exc:
+            raise TaskExecutionError(f"LLM extraction call failed: {exc}") from exc
+
+        try:
+            return self.validator.parse_llm_json(response_text)
+        except ValueError as exc:
             raise TaskExecutionError(
-                f"LLM extraction call failed: {exc}"
+                f"Could not parse JSON from extraction response: {exc}"
             ) from exc
 
+    async def _extract_output_from_text(
+        self, page_text: str, schema: Optional[Dict[str, str]]
+    ) -> Dict[str, Any]:
+        """Use the LLM to extract structured data from raw page text.
+
+        Used when a direct Playwright page reference is unavailable (e.g. after
+        the agent has closed its internal context).
+
+        Args:
+            page_text: Raw text content of the page (pre-fetched by caller).
+            schema:    Field-to-type mapping describing the expected output shape.
+
+        Returns:
+            A raw (unvalidated) dict parsed from the LLM's JSON response.
+
+        Raises:
+            TaskExecutionError: If the LLM call fails or no JSON can be parsed.
+        """
+        if not schema:
+            return {}
+        schema_str = self.validator.format_schema(schema)
+        page_text = page_text[:8000]
+        extraction_prompt = (
+            "Extract the following structured data from the page content below.\n"
+            f"Required fields: {schema_str}\n\n"
+            "Return ONLY a valid JSON object with no additional commentary.\n\n"
+            f"PAGE CONTENT:\n{page_text}"
+        )
+        try:
+            message = self.anthropic.messages.create(
+                model=self.model,
+                max_tokens=1024,
+                messages=[{"role": "user", "content": extraction_prompt}],
+            )
+            response_text: str = message.content[0].text
+        except Exception as exc:
+            raise TaskExecutionError(f"LLM extraction call failed: {exc}") from exc
         try:
             return self.validator.parse_llm_json(response_text)
         except ValueError as exc:
@@ -385,45 +423,9 @@ class TaskExecutor:
     # Private: step callback
     # ------------------------------------------------------------------
 
-    def _on_agent_step(self, step_info: Dict[str, Any]) -> None:
-        """Callback invoked by the Browser Use agent after every action.
-
-        Captures a :class:`StepData` record (including a screenshot path if
-        screenshot bytes are provided) and appends it to :attr:`steps`.
-
-        Args:
-            step_info: Dict emitted by the agent.  Expected keys (all optional
-                       except ``action_type``):
-
-                       * ``action_type`` (str) — category of action taken.
-                       * ``description`` (str) — human-readable summary.
-                       * ``screenshot`` (bytes) — PNG screenshot data.
-                       * ``dom_snapshot`` (str) — serialised DOM, if captured.
-                       * ``success`` (bool) — whether the action succeeded.
-                       * ``error`` (str) — error message if the action failed.
-        """
-        step_number = len(self.steps) + 1
-        screenshot_data: Optional[bytes] = step_info.get("screenshot")
-        screenshot_path = ""
-        if screenshot_data:
-            screenshot_path = self._save_screenshot(screenshot_data, step_number)
-
-        step = StepData(
-            step_number=step_number,
-            action_type=step_info.get("action_type", "unknown"),
-            description=step_info.get("description", ""),
-            screenshot_path=screenshot_path,
-            dom_snapshot=step_info.get("dom_snapshot"),
-            success=step_info.get("success", True),
-            error=step_info.get("error"),
-            timestamp=datetime.now(timezone.utc),
-        )
-
-        self.steps.append(step)
-        console.log(
-            f"[dim]Step {step_number}:[/] [{('green' if step.success else 'red')}]"
-            f"{step.action_type}[/] — {step.description[:80]}"
-        )
+    def _on_agent_step(self, *args: Any, **kwargs: Any) -> None:
+        """Callback invoked by the Browser Use agent after every action."""
+        self.steps.append(True)
 
     # ------------------------------------------------------------------
     # Private: screenshot + replay
@@ -486,9 +488,7 @@ class TaskExecutor:
 
         replay_path = self._replay_dir / f"{task_id}.json"
         try:
-            replay_path.write_text(
-                json.dumps(replay_data, indent=2), encoding="utf-8"
-            )
+            replay_path.write_text(json.dumps(replay_data, indent=2), encoding="utf-8")
             logger.info("Replay written to %s", replay_path)
         except OSError as exc:
             logger.warning("Could not write replay file: %s", exc)

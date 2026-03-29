@@ -72,7 +72,7 @@ class ComputerUse:
         api_key: Optional[str] = None,
         local: bool = True,
         model: str = settings.DEFAULT_MODEL,
-        headless: bool = True,
+        headless: bool = False,
         browserbase_api_key: Optional[str] = None,
     ) -> None:
         """Initialise the ComputerUse client.
@@ -443,9 +443,7 @@ class ComputerUse:
             ) from exc
 
         if response.status_code == 404:
-            raise ComputerUseSDKError(
-                f"No replay found for cloud task {task_id!r}"
-            )
+            raise ComputerUseSDKError(f"No replay found for cloud task {task_id!r}")
         _raise_for_status(response)
         return response.json().get("replay_url", "")
 
@@ -482,9 +480,7 @@ class ComputerUse:
         results: List[TaskResult] = []
         for path in files[:limit]:
             try:
-                results.append(
-                    TaskResult.from_json(path.read_text(encoding="utf-8"))
-                )
+                results.append(TaskResult.from_json(path.read_text(encoding="utf-8")))
             except Exception as exc:
                 logger.warning("Skipping corrupt cache file %s: %s", path, exc)
         return results
@@ -493,6 +489,7 @@ class ComputerUse:
 # ---------------------------------------------------------------------------
 # Module-level helpers
 # ---------------------------------------------------------------------------
+
 
 def _run_sync(coro: Any) -> Any:
     """Execute an async coroutine from synchronous code.

@@ -17,6 +17,8 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import urlparse
 
+from rich.console import Console
+
 from workers.browser_manager import BrowserManager
 from workers.captcha_solver import CaptchaSolver
 from workers.config import worker_settings
@@ -24,6 +26,12 @@ from workers.credential_injector import CredentialInjector
 from workers.models import ActionType, StepData, TaskConfig, TaskResult
 
 logger = logging.getLogger(__name__)
+console = Console()
+
+
+class TaskExecutionError(RuntimeError):
+    """Raised when the browser_use agent fails during task execution."""
+
 
 # Claude Sonnet pricing (per million tokens).
 _COST_PER_M_INPUT = 3.00
@@ -140,6 +148,7 @@ class TaskExecutor:
         use_cloud: bool = False,
         shutdown_check: Optional[Callable[[], bool]] = None,
         step_data: Optional[List[StepData]] = None,
+        model: str = "claude-sonnet-4-5-20250514",
     ) -> None:
         self.config = config
         self.browser_manager = browser_manager
@@ -147,6 +156,8 @@ class TaskExecutor:
         self.use_cloud = use_cloud
         self.shutdown_check = shutdown_check
         self._shared_step_data = step_data
+        self.model = model
+        self.steps: List[StepData] = []
 
     async def execute(self) -> TaskResult:
         """Execute the task end-to-end.
@@ -154,17 +165,15 @@ class TaskExecutor:
         1. Generate task_id, record start_time.
         2. Acquire browser, create page (1280x720), apply stealth.
         3. Navigate to config.url, capture step 1.
-        4. Build system prompt (NO credentials).
-        5. Tool-use agent loop until done/max_steps/cost_limit.
-        6. Cleanup browser in finally block.
-        7. Return TaskResult.
+        4. Run browser_use Agent via _execute_with_agent.
+        5. Cleanup browser in finally block.
+        6. Return TaskResult.
         """
         task_id = str(uuid.uuid4())
         start_time = time.monotonic()
         # Use shared list if provided (allows shutdown handler to see
         # accumulated steps for partial replay generation).
-        steps: List[StepData] = self._shared_step_data if self._shared_step_data is not None else []
-        cumulative_cost_cents = 0.0
+        self.steps = self._shared_step_data if self._shared_step_data is not None else []
         browser = None
 
         try:
@@ -185,7 +194,7 @@ class TaskExecutor:
             step_start = time.monotonic()
             await page.goto(self.config.url, wait_until="networkidle", timeout=30_000)
             screenshot_bytes = await page.screenshot(type="jpeg", quality=85)
-            steps.append(StepData(
+            self.steps.append(StepData(
                 step_number=1,
                 timestamp=datetime.now(timezone.utc),
                 action_type=ActionType.NAVIGATE,
@@ -195,204 +204,21 @@ class TaskExecutor:
                 success=True,
             ))
 
-            # -- Step 4: System prompt --
-            system_prompt = self._build_system_prompt(self.config)
+            # -- Step 4: Run browser_use Agent --
+            raw_result = await self._execute_with_agent(browser, self.config)
+            result_data = None
+            if hasattr(raw_result, "final_result"):
+                result_data = raw_result.final_result()
 
-            # -- Step 5: Tool-use agent loop --
-            messages: List[Dict[str, Any]] = []
-
-            for step_num in range(2, self.config.max_steps + 1):
-                # Check for graceful shutdown
-                if self.shutdown_check and self.shutdown_check():
-                    logger.info("Shutdown detected, breaking agent loop at step %d", step_num)
-                    break
-
-                step_start = time.monotonic()
-
-                # a) Capture screenshot
-                screenshot_bytes = await page.screenshot(type="jpeg", quality=85)
-                screenshot_b64 = base64.standard_b64encode(screenshot_bytes).decode("ascii")
-
-                # Build context from last 3 steps
-                recent = "\n".join(
-                    f"Step {s.step_number}: [{s.action_type}] {s.description}"
-                    for s in steps[-3:]
-                )
-
-                # b) Build user message with screenshot
-                user_content: List[Dict[str, Any]] = [
-                    {"type": "text", "text": f"Task: {self.config.task}\n\nRecent actions:\n{recent}\n\nWhat should I do next?"},
-                    {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": screenshot_b64}},
-                ]
-
-                # Keep conversation manageable: only last 5 exchanges
-                if len(messages) > 10:
-                    messages = messages[-10:]
-
-                messages.append({"role": "user", "content": user_content})
-
-                # c) Call Anthropic API with tools
-                try:
-                    response = self.llm_client.messages.create(
-                        model="claude-sonnet-4-5-20250514",
-                        max_tokens=1024,
-                        system=system_prompt,
-                        tools=_TOOLS,
-                        messages=messages,
-                    )
-                except Exception as exc:
-                    logger.error("LLM API call failed at step %d: %s", step_num, exc)
-                    steps.append(StepData(
-                        step_number=step_num,
-                        timestamp=datetime.now(timezone.utc),
-                        action_type=ActionType.UNKNOWN,
-                        description=f"LLM API call failed: {exc}",
-                        screenshot_bytes=screenshot_bytes,
-                        duration_ms=int((time.monotonic() - step_start) * 1000),
-                        success=False,
-                        error=str(exc),
-                    ))
-                    break
-
-                # Track tokens
-                tokens_in = getattr(response.usage, "input_tokens", 0)
-                tokens_out = getattr(response.usage, "output_tokens", 0)
-                step_cost = (tokens_in / 1_000_000 * _COST_PER_M_INPUT + tokens_out / 1_000_000 * _COST_PER_M_OUTPUT) * 100
-                cumulative_cost_cents += step_cost
-
-                # d) Parse response — find tool_use block
-                tool_use_block = None
-                text_response = ""
-                assistant_content = response.content
-                for block in assistant_content:
-                    if getattr(block, "type", None) == "tool_use":
-                        tool_use_block = block
-                    elif getattr(block, "type", None) == "text":
-                        text_response = getattr(block, "text", "")
-
-                # Append assistant message to conversation
-                messages.append({"role": "assistant", "content": assistant_content})
-
-                if tool_use_block is None:
-                    # No tool call — model is thinking. Record and continue.
-                    steps.append(StepData(
-                        step_number=step_num,
-                        timestamp=datetime.now(timezone.utc),
-                        action_type=ActionType.UNKNOWN,
-                        description=text_response[:500] or "Model response without tool call",
-                        screenshot_bytes=screenshot_bytes,
-                        llm_response=text_response,
-                        tokens_in=tokens_in,
-                        tokens_out=tokens_out,
-                        duration_ms=int((time.monotonic() - step_start) * 1000),
-                        success=True,
-                    ))
-                    # Append a tool_result for the next turn
-                    messages.append({"role": "user", "content": [{"type": "text", "text": "Please use a tool to take the next action."}]})
-                    continue
-
-                tool_name = tool_use_block.name
-                tool_input = tool_use_block.input
-                tool_use_id = tool_use_block.id
-
-                # Map tool name to ActionType
-                action_type = _tool_to_action_type(tool_name)
-
-                # e) Check if agent signals completion
-                if tool_name == "done":
-                    step_duration = int((time.monotonic() - step_start) * 1000)
-                    steps.append(StepData(
-                        step_number=step_num,
-                        timestamp=datetime.now(timezone.utc),
-                        action_type=ActionType.EXTRACT,
-                        description=tool_input.get("message", "Task completed")[:500],
-                        screenshot_bytes=screenshot_bytes,
-                        llm_response=text_response,
-                        tokens_in=tokens_in,
-                        tokens_out=tokens_out,
-                        duration_ms=step_duration,
-                        success=True,
-                    ))
-                    return TaskResult(
-                        task_id=task_id,
-                        status="completed",
-                        success=True,
-                        result=tool_input.get("result"),
-                        steps=len(steps),
-                        duration_ms=int((time.monotonic() - start_time) * 1000),
-                        cost_cents=cumulative_cost_cents,
-                        step_data=steps,
-                    )
-
-                # f) Execute the tool action
-                action_error: Optional[str] = None
-                action_success = True
-                description = ""
-
-                try:
-                    description = await self._execute_tool(page, tool_name, tool_input)
-                except Exception as exc:
-                    action_error = str(exc)
-                    action_success = False
-                    description = f"{tool_name} failed: {exc}"
-                    logger.warning("Action failed at step %d: %s", step_num, exc)
-
-                # g) Wait for network idle (max 5s)
-                try:
-                    await page.wait_for_load_state("networkidle", timeout=5000)
-                except Exception:
-                    pass
-
-                step_duration = int((time.monotonic() - step_start) * 1000)
-
-                # h) Record StepData
-                steps.append(StepData(
-                    step_number=step_num,
-                    timestamp=datetime.now(timezone.utc),
-                    action_type=action_type,
-                    description=description[:500],
-                    screenshot_bytes=screenshot_bytes,
-                    llm_response=text_response,
-                    tokens_in=tokens_in,
-                    tokens_out=tokens_out,
-                    duration_ms=step_duration,
-                    success=action_success,
-                    error=action_error,
-                ))
-
-                # Append tool_result to conversation
-                tool_result_content = description if action_success else f"Error: {action_error}"
-                messages.append({
-                    "role": "user",
-                    "content": [{"type": "tool_result", "tool_use_id": tool_use_id, "content": tool_result_content}],
-                })
-
-                # i) Check cost limit
-                if self.config.max_cost_cents and cumulative_cost_cents > self.config.max_cost_cents:
-                    logger.warning(
-                        "Cost limit exceeded: %.2f cents > %d cents",
-                        cumulative_cost_cents, self.config.max_cost_cents,
-                    )
-                    return TaskResult(
-                        task_id=task_id,
-                        status="failed",
-                        success=False,
-                        error="COST_LIMIT_EXCEEDED",
-                        steps=len(steps),
-                        duration_ms=int((time.monotonic() - start_time) * 1000),
-                        cost_cents=cumulative_cost_cents,
-                        step_data=steps,
-                    )
-
-            # Max steps reached
             return TaskResult(
                 task_id=task_id,
                 status="completed",
                 success=True,
-                steps=len(steps),
+                result=result_data,
+                steps=len(self.steps),
                 duration_ms=int((time.monotonic() - start_time) * 1000),
-                cost_cents=cumulative_cost_cents,
-                step_data=steps,
+                cost_cents=0.0,
+                step_data=self.steps,
             )
 
         except Exception as exc:
@@ -402,10 +228,10 @@ class TaskExecutor:
                 status="failed",
                 success=False,
                 error=str(exc),
-                steps=len(steps),
+                steps=len(self.steps),
                 duration_ms=int((time.monotonic() - start_time) * 1000),
-                cost_cents=cumulative_cost_cents,
-                step_data=steps,
+                cost_cents=0.0,
+                step_data=self.steps,
             )
 
         finally:
@@ -414,6 +240,63 @@ class TaskExecutor:
                     await self.browser_manager.release_browser(browser)
                 except Exception as exc:
                     logger.warning("Error releasing browser: %s", exc)
+
+    async def _execute_with_agent(
+        self, browser: Any, config: TaskConfig
+    ) -> Any:
+        prompt = self._build_task_prompt(config)
+
+        from langchain_anthropic import ChatAnthropic
+        llm = ChatAnthropic(
+            model_name=self.model,
+            anthropic_api_key=worker_settings.ANTHROPIC_API_KEY,
+            timeout=60,
+        )
+
+        from browser_use import Agent
+        agent = Agent(
+            task=prompt,
+            llm=llm,
+            browser=browser,
+            register_new_step_callback=self._on_agent_step,
+        )
+
+        try:
+            result = await agent.run(max_steps=config.max_steps)
+            return result
+        except Exception as exc:
+            raise TaskExecutionError(
+                f"Browser Use agent failed: {exc}"
+            ) from exc
+
+    def _on_agent_step(self, *args: Any, **kwargs: Any) -> None:
+        step_number = len(self.steps) + 1
+        step = StepData(
+            step_number=step_number,
+            timestamp=datetime.now(timezone.utc),
+            action_type=ActionType.UNKNOWN,
+            description=str(args[0]) if args else "step",
+            screenshot_bytes=None,
+            success=True,
+        )
+        self.steps.append(step)
+        console.log(f"[dim]Step {step_number}[/]")
+
+    def _build_task_prompt(self, config: TaskConfig) -> str:
+        """Build the task prompt passed to the browser_use Agent."""
+        lines = [
+            f"Go to {config.url} and complete the following task:",
+            config.task,
+        ]
+        if config.output_schema:
+            lines.append(
+                f"Extract data matching this schema: {json.dumps(config.output_schema)}"
+            )
+        if config.credentials:
+            lines.append(
+                "When you encounter a login form, use the available credential injection tool."
+            )
+        return "\n\n".join(lines)
 
     async def _execute_tool(self, page: Any, tool_name: str, tool_input: Dict[str, Any]) -> str:
         """Dispatch a tool call to the corresponding Playwright action. Returns description."""
