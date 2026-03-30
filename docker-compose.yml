@@ -27,6 +27,23 @@ services:
       timeout: 3s
       retries: 5
 
+  migrate:
+    image: postgres:16
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./api/db/migrations:/migrations:ro
+      - ./api/db/init-migrations.sh:/init-migrations.sh:ro
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: computeruse
+    entrypoint: ["bash", "/init-migrations.sh"]
+    restart: "no"
+
   api:
     build:
       context: .
@@ -34,11 +51,16 @@ services:
     ports:
       - "8000:8000"
     env_file: .env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/computeruse
+      - REDIS_URL=redis://redis:6379/0
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - ./api:/app/api
       - ./shared:/app/shared
@@ -49,11 +71,16 @@ services:
       context: .
       dockerfile: infra/Dockerfile.worker
     env_file: .env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/computeruse
+      - REDIS_URL=redis://redis:6379/0
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - ./workers:/app/workers
       - ./shared:/app/shared
@@ -65,6 +92,9 @@ services:
     ports:
       - "3000:3000"
     env_file: .env
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - INTERNAL_API_URL=http://api:8000
     volumes:
       - ./dashboard:/app
       - dashboard_node_modules:/app/node_modules

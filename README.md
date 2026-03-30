@@ -119,37 +119,65 @@ The SDK manages the full lifecycle: launching a browser, building the LLM prompt
 
 ---
 
-## Environment Setup
+## Development
 
-**1. Get an Anthropic API key**
+### Prerequisites
 
-Sign up at [console.anthropic.com](https://console.anthropic.com/settings/keys) and create a key.
+- Docker and Docker Compose
+- Anthropic API key ([get one here](https://console.anthropic.com/settings/keys))
 
-**2. Create a `.env` file in the repo root**
+### Quick Start
 
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and set at minimum:
-
-```dotenv
-ANTHROPIC_API_KEY=sk-ant-...
-```
-
-**3. Install Playwright browsers** (required for local execution)
+1. Clone and setup:
 
 ```bash
-playwright install chromium
+git clone <repo-url> && cd observius
+make setup
 ```
 
-**4. Verify**
+2. Add your Anthropic API key to `.env`:
 
-```python
-from computeruse import ComputerUse
-cu = ComputerUse()
-print("Ready")
 ```
+ANTHROPIC_API_KEY=sk-ant-your-key-here
+```
+
+3. Start all services:
+
+```bash
+make dev
+```
+
+4. Open [http://localhost:3000](http://localhost:3000) and use the test API key:
+
+```
+cu_test_testkey1234567890abcdef12
+```
+
+### Useful Commands
+
+| Command | Description |
+|---------|-------------|
+| `make dev` | Start all services (Postgres, Redis, API, worker, dashboard) |
+| `make logs` | Tail all container logs |
+| `make logs-api` | Tail API logs only |
+| `make logs-worker` | Tail worker logs only |
+| `make shell-db` | Open a psql shell |
+| `make shell-api` | Open a bash shell in the API container |
+| `make test` | Run backend + frontend tests |
+| `make lint` | Run ruff + eslint |
+| `make fresh` | Destroy volumes and rebuild from scratch |
+
+### Local SDK Setup (no Docker)
+
+If you want to run the SDK directly instead of through Docker:
+
+1. Install Playwright browsers: `playwright install chromium`
+2. Install the SDK: `pip install -e sdk/`
+3. Verify: `python -c "from computeruse import ComputerUse; print('Ready')"`
+
+---
+
+## SDK Reference
 
 ### `run_task` parameters
 
