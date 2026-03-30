@@ -120,6 +120,28 @@ celery_stuck_failure_spiral_total = Counter(
     ["task_name"],
 )
 
+# Native executor metrics
+celery_native_step_total = Counter(
+    "celery_native_step_total",
+    "Native executor steps by action type",
+    ["task_name", "action_type"],
+)
+celery_native_llm_retry_total = Counter(
+    "celery_native_llm_retry_total",
+    "LLM API retries in native executor loop",
+    ["task_name"],
+)
+celery_native_stuck_recovery_total = Counter(
+    "celery_native_stuck_recovery_total",
+    "Stuck recovery hints injected in native executor",
+    ["task_name"],
+)
+celery_native_context_trim_total = Counter(
+    "celery_native_context_trim_total",
+    "Context window trims in native executor",
+    ["task_name"],
+)
+
 # ---------------------------------------------------------------------------
 # Task timing bookkeeping
 # ---------------------------------------------------------------------------

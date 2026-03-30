@@ -6,8 +6,21 @@ export type TaskStatus =
   | "timeout"
   | "cancelled";
 
+export type ErrorCategory =
+  | "transient_llm"
+  | "rate_limited"
+  | "transient_network"
+  | "transient_browser"
+  | "permanent_llm"
+  | "permanent_browser"
+  | "permanent_task"
+  | "unknown";
+
+export type ExecutorMode = "browser_use" | "native";
+
 export interface TaskResponse {
   task_id: string;
+  url: string | null;
   status: TaskStatus;
   success: boolean;
   result: Record<string, unknown> | null;
@@ -17,6 +30,13 @@ export interface TaskResponse {
   duration_ms: number;
   created_at: string;
   completed_at: string | null;
+  retry_count: number;
+  retry_of_task_id: string | null;
+  error_category: ErrorCategory | null;
+  cost_cents: number;
+  total_tokens_in: number;
+  total_tokens_out: number;
+  executor_mode: ExecutorMode;
 }
 
 export interface TaskListResponse {
@@ -35,6 +55,7 @@ export interface TaskCreateRequest {
   session_id?: string;
   webhook_url?: string;
   max_cost_cents?: number;
+  executor_mode?: ExecutorMode;
 }
 
 export interface SessionResponse {

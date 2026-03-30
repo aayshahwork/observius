@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ListTodo, Key, BarChart3, Settings, LogOut, Sun, Moon, Monitor } from "lucide-react";
+import { LayoutDashboard, ListTodo, Key, BarChart3, Settings, LogOut, Sun, Moon, Monitor } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/contexts/auth-context";
 import { useTheme } from "@/contexts/theme-context";
 import { cn } from "@/lib/utils";
 
 const navItems = [
+  { href: "/overview", label: "Overview", icon: LayoutDashboard },
   { href: "/tasks", label: "Tasks", icon: ListTodo },
   { href: "/sessions", label: "Sessions", icon: Key },
   { href: "/usage", label: "Usage", icon: BarChart3 },
@@ -35,7 +36,7 @@ export function Sidebar({ className }: { className?: string }) {
       )}
     >
       <div className="flex h-14 items-center px-4">
-        <Link href="/tasks" className="text-base font-semibold tracking-tight">
+        <Link href="/overview" className="text-base font-semibold tracking-tight">
           ComputerUse.dev
         </Link>
       </div>

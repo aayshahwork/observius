@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, String, text
+from sqlalchemy import DateTime, ForeignKey, String, text
 from sqlalchemy.dialects.postgresql import INET, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -24,7 +24,7 @@ class AuditLog(Base):
     resource_id: Mapped[str] = mapped_column(String, nullable=False)
     metadata_: Mapped[dict | None] = mapped_column("metadata", JSONB)
     ip_address: Mapped[str | None] = mapped_column(INET)
-    created_at: Mapped[datetime | None] = mapped_column(server_default=text("now()"))
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
 
     account: Mapped[Account] = relationship(back_populates="audit_logs")
 

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import CheckConstraint, ForeignKey, Integer, Numeric, String, Boolean, text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, Numeric, String, Boolean, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -57,9 +57,10 @@ class Task(Base):
     retry_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     retry_of_task_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tasks.id"))
     error_category: Mapped[str | None] = mapped_column(String(50))
-    created_at: Mapped[datetime | None] = mapped_column(server_default=text("now()"))
-    started_at: Mapped[datetime | None] = mapped_column()
-    completed_at: Mapped[datetime | None] = mapped_column()
+    executor_mode: Mapped[str | None] = mapped_column(String(20), server_default=text("'browser_use'"))
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Relationships
     account: Mapped[Account] = relationship(back_populates="tasks")

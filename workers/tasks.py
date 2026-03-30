@@ -102,7 +102,7 @@ def execute_task(self, task_id: str, task_config_json: str) -> None:
                 "SET status = 'running', "
                 "    started_at = now(), "
                 "    worker_id = :worker_id "
-                "WHERE id = :task_id::uuid AND status = 'queued' "
+                "WHERE id = CAST(:task_id AS uuid) AND status = 'queued' "
                 "RETURNING account_id"
             ),
             {"task_id": task_id, "worker_id": self.request.hostname},
@@ -150,6 +150,7 @@ def execute_task(self, task_id: str, task_config_json: str) -> None:
             timeout_seconds=timeout_seconds,
             max_cost_cents=config_dict.get("max_cost_cents"),
             session_id=config_dict.get("session_id"),
+            executor_mode=config_dict.get("executor_mode", "browser_use"),
         )
 
         from anthropic import Anthropic

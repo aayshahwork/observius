@@ -47,6 +47,7 @@ def _task_to_response(task: Task) -> TaskResponse:
     """Convert a Task ORM object to a TaskResponse."""
     return TaskResponse(
         task_id=task.id,
+        url=task.url,
         status=task.status or "queued",
         success=task.success or False,
         result=task.result,
@@ -59,6 +60,10 @@ def _task_to_response(task: Task) -> TaskResponse:
         retry_count=task.retry_count or 0,
         retry_of_task_id=task.retry_of_task_id,
         error_category=task.error_category,
+        cost_cents=round(float(task.cost_cents or 0), 4),
+        total_tokens_in=task.total_tokens_in or 0,
+        total_tokens_out=task.total_tokens_out or 0,
+        executor_mode=task.executor_mode or "browser_use",
     )
 
 
@@ -128,6 +133,7 @@ async def create_task(
         webhook_url=str(body.webhook_url) if body.webhook_url else None,
         max_cost_cents=body.max_cost_cents,
         session_id=body.session_id,
+        executor_mode=body.executor_mode,
         created_at=datetime.now(timezone.utc),
     )
     db.add(task)
@@ -160,6 +166,7 @@ async def create_task(
         "webhook_url": str(body.webhook_url) if body.webhook_url else None,
         "retry_attempts": body.max_retries,
         "retry_delay_seconds": 2,
+        "executor_mode": body.executor_mode,
     })
 
     _celery.send_task(
@@ -224,6 +231,7 @@ async def list_tasks(
     offset: int = Query(default=0, ge=0),
     task_status: str | None = Query(default=None, alias="status"),
     since: datetime | None = Query(default=None),
+    session_id: uuid.UUID | None = Query(default=None),
     account: Account = Depends(get_current_account),
     db: AsyncSession = Depends(get_db),
 ) -> TaskListResponse:
@@ -234,6 +242,8 @@ async def list_tasks(
         base = base.where(Task.status == task_status)
     if since:
         base = base.where(Task.created_at >= since)
+    if session_id:
+        base = base.where(Task.session_id == session_id)
 
     # Total count
     count_stmt = select(func.count()).select_from(base.subquery())
@@ -351,6 +361,7 @@ async def retry_task(
         webhook_url=original.webhook_url,
         max_cost_cents=original.max_cost_cents,
         session_id=original.session_id,
+        executor_mode=original.executor_mode or "browser_use",
         created_at=datetime.now(timezone.utc),
     )
     db.add(new_task)
@@ -382,6 +393,7 @@ async def retry_task(
         "webhook_url": original.webhook_url,
         "retry_attempts": 0,
         "retry_delay_seconds": 2,
+        "executor_mode": original.executor_mode or "browser_use",
     })
     _celery.send_task(
         "computeruse.execute_task",

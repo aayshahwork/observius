@@ -2,9 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { formatDistanceToNow } from "date-fns";
-import { Key, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { differenceInDays, formatDistanceToNow } from "date-fns";
+import { Key } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -16,10 +15,56 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { SessionDrawer, AUTH_STATE_CONFIG } from "@/components/session-drawer";
 import { useApiClient } from "@/hooks/use-api-client";
 import { ApiError } from "@/lib/api-client";
 import type { SessionResponse } from "@/lib/types";
+
+function AuthStateBadge({ state }: { state: string | null }) {
+  const config = AUTH_STATE_CONFIG[state ?? ""] ?? {
+    dot: "bg-muted-foreground",
+    badge: "",
+    label: state ?? "Unknown",
+  };
+  return (
+    <Badge variant="secondary" className={config.badge}>
+      <span className={`mr-1.5 inline-block size-2 rounded-full ${config.dot}`} />
+      {config.label}
+    </Badge>
+  );
+}
+
+function StatsRow({ sessions }: { sessions: SessionResponse[] }) {
+  const total = sessions.length;
+  const active = sessions.filter(
+    (s) => s.auth_state === "active" || s.auth_state === "authenticated"
+  ).length;
+  const stale = sessions.filter((s) => s.auth_state === "stale").length;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-4">
+        <div className="rounded-md border px-3 py-2">
+          <p className="text-xs text-muted-foreground">Total</p>
+          <p className="text-lg font-semibold">{total}</p>
+        </div>
+        <div className="rounded-md border px-3 py-2">
+          <p className="text-xs text-muted-foreground">Active</p>
+          <p className="text-lg font-semibold text-green-600 dark:text-green-400">{active}</p>
+        </div>
+        <div className="rounded-md border px-3 py-2">
+          <p className="text-xs text-muted-foreground">Stale</p>
+          <p className={`text-lg font-semibold ${stale > 0 ? "text-amber-600 dark:text-amber-400" : ""}`}>
+            {stale}
+          </p>
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Sessions are created automatically when tasks require login.
+      </p>
+    </div>
+  );
+}
 
 export default function SessionsPage() {
   const client = useApiClient();
@@ -27,8 +72,7 @@ export default function SessionsPage() {
   const [sessions, setSessions] = useState<SessionResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState(false);
+  const [selectedSession, setSelectedSession] = useState<SessionResponse | null>(null);
 
   const fetchSessions = useCallback(async () => {
     if (!client) return;
@@ -51,32 +95,9 @@ export default function SessionsPage() {
     fetchSessions();
   }, [fetchSessions]);
 
-  const handleDelete = async () => {
-    if (!client || !deleteTarget) return;
-    setDeleting(true);
-    try {
-      await client.deleteSession(deleteTarget);
-      setDeleteTarget(null);
-      fetchSessions();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete session");
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  const authStateBadge = (state: string | null) => {
-    if (!state) return <Badge variant="secondary">Unknown</Badge>;
-    switch (state) {
-      case "active":
-        return <Badge className="bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300">Active</Badge>;
-      case "stale":
-        return <Badge className="bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300">Stale</Badge>;
-      case "expired":
-        return <Badge variant="secondary">Expired</Badge>;
-      default:
-        return <Badge variant="secondary">{state}</Badge>;
-    }
+  const isLastUsedStale = (lastUsedAt: string | null): boolean => {
+    if (!lastUsedAt) return false;
+    return differenceInDays(new Date(), new Date(lastUsedAt)) > 7;
   };
 
   return (
@@ -100,53 +121,59 @@ export default function SessionsPage() {
           description="Session management coming soon. Sessions are created automatically when tasks use authenticated browsing."
         />
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Domain</TableHead>
-              <TableHead>Auth State</TableHead>
-              <TableHead className="hidden sm:table-cell">Last Used</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sessions.map((session) => (
-              <TableRow key={session.session_id}>
-                <TableCell className="font-medium">
-                  {session.origin_domain}
-                </TableCell>
-                <TableCell>{authStateBadge(session.auth_state)}</TableCell>
-                <TableCell className="hidden sm:table-cell text-muted-foreground">
-                  {session.last_used_at
-                    ? formatDistanceToNow(new Date(session.last_used_at), {
-                        addSuffix: true,
-                      })
-                    : "Never"}
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => setDeleteTarget(session.session_id)}
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
-                </TableCell>
+        <>
+          <StatsRow sessions={sessions} />
+
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Domain</TableHead>
+                <TableHead>Auth State</TableHead>
+                <TableHead className="hidden sm:table-cell">Last Used</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {sessions.map((session) => (
+                <TableRow
+                  key={session.session_id}
+                  className="cursor-pointer"
+                  onClick={() => setSelectedSession(session)}
+                >
+                  <TableCell className="font-medium">
+                    {session.origin_domain}
+                  </TableCell>
+                  <TableCell>
+                    <AuthStateBadge state={session.auth_state} />
+                  </TableCell>
+                  <TableCell className="hidden sm:table-cell">
+                    {session.last_used_at ? (
+                      <span
+                        className={
+                          isLastUsedStale(session.last_used_at)
+                            ? "text-amber-600 dark:text-amber-400"
+                            : "text-muted-foreground"
+                        }
+                      >
+                        {formatDistanceToNow(new Date(session.last_used_at), {
+                          addSuffix: true,
+                        })}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">Never</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </>
       )}
 
-      <ConfirmDialog
-        open={!!deleteTarget}
-        onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Delete Session"
-        description="This will delete the session and its stored cookies. Any tasks using this session will need to re-authenticate."
-        confirmLabel="Delete"
-        variant="destructive"
-        loading={deleting}
-        onConfirm={handleDelete}
+      <SessionDrawer
+        session={selectedSession}
+        open={!!selectedSession}
+        onOpenChange={(open) => !open && setSelectedSession(null)}
+        onDeleted={fetchSessions}
       />
     </div>
   );

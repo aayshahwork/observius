@@ -106,6 +106,19 @@ _psycopg2 = _stub("psycopg2")
 _rich = _stub("rich")
 _rich_console = _stub("rich.console", Console=MagicMock)
 
+# PIL (Pillow) — stub if not installed ──────────────────────────────────────
+try:
+    import PIL  # noqa: F401
+except ImportError:
+    _pil = _stub("PIL")
+    _pil_image = _stub("PIL.Image")
+    _mock_img = MagicMock()
+    _mock_img.size = (1280, 720)
+    _mock_img.resize = MagicMock(return_value=_mock_img)
+    _mock_img.save = MagicMock()
+    _pil_image.open = MagicMock(return_value=_mock_img)
+    _pil_image.LANCZOS = 1
+
 # ---------------------------------------------------------------------------
 # pytest-asyncio global mode
 # ---------------------------------------------------------------------------

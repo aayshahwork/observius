@@ -49,11 +49,16 @@ tasks/
 .tasks/
 
 # SDK runtime output
-replays/
-sessions/
+/replays/
+/sessions/
 *.egg-info/
 competitor_report.json
 intel_report.json
+
+# Playwright artifacts
+playwright-report/
+playwright-results.xml
+test-results/
 
 # Scratch / dev scripts (local only)
 cleanup_supabase.py

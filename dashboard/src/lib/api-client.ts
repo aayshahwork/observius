@@ -62,12 +62,14 @@ export class ApiClient {
     offset?: number;
     status?: string;
     since?: string;
+    session_id?: string;
   }): Promise<TaskListResponse> {
     const qs = new URLSearchParams();
     if (params?.limit) qs.set("limit", String(params.limit));
     if (params?.offset) qs.set("offset", String(params.offset));
     if (params?.status) qs.set("status", params.status);
     if (params?.since) qs.set("since", params.since);
+    if (params?.session_id) qs.set("session_id", params.session_id);
     const query = qs.toString();
     return apiCall<TaskListResponse>(
       `/api/v1/tasks${query ? `?${query}` : ""}`,

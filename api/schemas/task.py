@@ -32,6 +32,11 @@ class TaskCreateRequest(BaseModel):
     idempotency_key: str | None = Field(default=None, max_length=255)
     webhook_url: HttpUrl | None = Field(default=None)
     max_cost_cents: int | None = Field(default=None, gt=0)
+    executor_mode: str = Field(
+        default="browser_use",
+        pattern=r"^(browser_use|native)$",
+        description="Executor mode: 'browser_use' (DOM-based) or 'native' (screenshot pixel-based)",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -42,6 +47,7 @@ class TaskResponse(BaseModel):
     """Representation of a single task."""
 
     task_id: uuid.UUID
+    url: str | None = None
     status: str
     success: bool = False
     result: dict[str, Any] | None = None
@@ -54,6 +60,10 @@ class TaskResponse(BaseModel):
     retry_count: int = 0
     retry_of_task_id: uuid.UUID | None = None
     error_category: str | None = None
+    cost_cents: float = 0.0
+    total_tokens_in: int = 0
+    total_tokens_out: int = 0
+    executor_mode: str = "browser_use"
 
     model_config = {"from_attributes": True}
 

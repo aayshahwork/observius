@@ -24,6 +24,16 @@ class ActionType(StrEnum):
     INJECT_CREDENTIALS = "inject_credentials"
     SOLVE_CAPTCHA = "solve_captcha"
     UNKNOWN = "unknown"
+    # Native executor actions (computer_20251124)
+    MOUSE_MOVE = "mouse_move"
+    KEY_PRESS = "key_press"
+    DOUBLE_CLICK = "double_click"
+    RIGHT_CLICK = "right_click"
+    MIDDLE_CLICK = "middle_click"
+    SCREENSHOT = "screenshot"
+    DRAG = "drag"
+    TRIPLE_CLICK = "triple_click"
+    ZOOM = "zoom"
 
 
 @dataclass
@@ -63,6 +73,7 @@ class TaskConfig:
     retry_delay_seconds: int = 2
     max_cost_cents: Optional[int] = None
     session_id: Optional[str] = None
+    executor_mode: str = "browser_use"  # "browser_use" | "native"
 
 
 @dataclass
