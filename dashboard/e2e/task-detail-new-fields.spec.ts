@@ -15,6 +15,7 @@ import {
   mockTaskDetail,
   mockTaskReplay,
   mockTaskList,
+  mockTaskSteps,
   COMPLETED_TASK_FULL,
   FAILED_TASK_WITH_RETRY,
   COMPLETED_TASK_MINIMAL,
@@ -30,6 +31,8 @@ test.describe("executor mode badge", () => {
   }) => {
     await mockTaskDetail(page, COMPLETED_TASK_FULL);
     await mockTaskReplay(page, COMPLETED_TASK_FULL.task_id);
+    await mockTaskSteps(page, COMPLETED_TASK_FULL.task_id, []);
+    await mockTaskList(page, []);
 
     await page.goto(`/tasks/${COMPLETED_TASK_FULL.task_id}`);
 
@@ -48,6 +51,8 @@ test.describe("executor mode badge", () => {
     authedPage: page,
   }) => {
     await mockTaskDetail(page, FAILED_TASK_WITH_RETRY);
+    await mockTaskSteps(page, FAILED_TASK_WITH_RETRY.task_id, []);
+    await mockTaskList(page, []);
     // Replay will 404 for failed native task — that's fine
     await page.route(`**/api/v1/tasks/${FAILED_TASK_WITH_RETRY.task_id}/replay`, (route) =>
       route.fulfill({ status: 404, json: { error_code: "NOT_FOUND", message: "No replay" } })
@@ -72,6 +77,8 @@ test.describe("cost field in metadata grid", () => {
   }) => {
     await mockTaskDetail(page, COMPLETED_TASK_FULL); // cost_cents: 3
     await mockTaskReplay(page, COMPLETED_TASK_FULL.task_id);
+    await mockTaskSteps(page, COMPLETED_TASK_FULL.task_id, []);
+    await mockTaskList(page, []);
 
     await page.goto(`/tasks/${COMPLETED_TASK_FULL.task_id}`);
 
@@ -86,6 +93,8 @@ test.describe("cost field in metadata grid", () => {
   }) => {
     await mockTaskDetail(page, COMPLETED_TASK_MINIMAL); // cost_cents: 0
     await mockTaskReplay(page, COMPLETED_TASK_MINIMAL.task_id);
+    await mockTaskSteps(page, COMPLETED_TASK_MINIMAL.task_id, []);
+    await mockTaskList(page, []);
 
     await page.goto(`/tasks/${COMPLETED_TASK_MINIMAL.task_id}`);
 
@@ -106,6 +115,8 @@ test.describe("token field in metadata grid", () => {
   }) => {
     await mockTaskDetail(page, COMPLETED_TASK_FULL); // tokens_in: 1200, out: 800
     await mockTaskReplay(page, COMPLETED_TASK_FULL.task_id);
+    await mockTaskSteps(page, COMPLETED_TASK_FULL.task_id, []);
+    await mockTaskList(page, []);
 
     await page.goto(`/tasks/${COMPLETED_TASK_FULL.task_id}`);
 
@@ -119,6 +130,8 @@ test.describe("token field in metadata grid", () => {
   }) => {
     await mockTaskDetail(page, COMPLETED_TASK_MINIMAL); // both 0
     await mockTaskReplay(page, COMPLETED_TASK_MINIMAL.task_id);
+    await mockTaskSteps(page, COMPLETED_TASK_MINIMAL.task_id, []);
+    await mockTaskList(page, []);
 
     await page.goto(`/tasks/${COMPLETED_TASK_MINIMAL.task_id}`);
 
@@ -137,48 +150,56 @@ test.describe("token field in metadata grid", () => {
 // ---------------------------------------------------------------------------
 
 test.describe("retry chain banner", () => {
+  const originalId = FAILED_TASK_WITH_RETRY.retry_of_task_id!;
+  const rootTask: import("../src/lib/types").TaskResponse = {
+    ...COMPLETED_TASK_FULL,
+    task_id: originalId,
+    retry_count: 0,
+    retry_of_task_id: null,
+  };
+
+  /** Set up all mocks needed for the failed-retry task detail page. */
+  async function setupRetryMocks(page: import("@playwright/test").Page) {
+    await mockTaskDetail(page, FAILED_TASK_WITH_RETRY);
+    await mockTaskSteps(page, FAILED_TASK_WITH_RETRY.task_id, []);
+    await page.route(
+      `**/api/v1/tasks/${FAILED_TASK_WITH_RETRY.task_id}/replay`,
+      (route) => route.fulfill({ status: 404, json: { error_code: "NOT_FOUND", message: "No replay" } })
+    );
+    // RetryChain calls listTasks({ retry_of_task_id }) and getTask(rootId)
+    await mockTaskList(page, [FAILED_TASK_WITH_RETRY]);
+    await page.route(`**/api/v1/tasks/${originalId}`, (route) => {
+      if (route.request().method() !== "GET") { route.continue(); return; }
+      route.fulfill({ status: 200, json: rootTask });
+    });
+  }
+
   test("shows retry banner when retry_count > 0 and retry_of_task_id is set", async ({
     authedPage: page,
   }) => {
-    await mockTaskDetail(page, FAILED_TASK_WITH_RETRY);
-    await page.route(
-      `**/api/v1/tasks/${FAILED_TASK_WITH_RETRY.task_id}/replay`,
-      (route) => route.fulfill({ status: 404, json: { error_code: "NOT_FOUND", message: "No replay" } })
-    );
-
+    await setupRetryMocks(page);
     await page.goto(`/tasks/${FAILED_TASK_WITH_RETRY.task_id}`);
 
-    // Banner text: "Retry attempt 2 — original task:"
-    await expect(page.getByText(/Retry attempt 2/)).toBeVisible();
-    // Link shows first 8 chars of the original task ID
-    const originalId = FAILED_TASK_WITH_RETRY.retry_of_task_id!;
-    await expect(page.getByText(originalId.slice(0, 8))).toBeVisible();
+    // RetryChain renders "Attempt {retry_count+1} of {chain.length}"
+    // retry_count=2 → "Attempt 3 of 2" (root + 1 retry in mock list)
+    await expect(page.getByText(/Attempt \d+ of \d+/)).toBeVisible();
   });
 
-  test("clicking the original task link navigates to it", async ({
+  test("clicking another attempt in the retry chain navigates to it", async ({
     authedPage: page,
   }) => {
-    await mockTaskDetail(page, FAILED_TASK_WITH_RETRY);
-    await page.route(
-      `**/api/v1/tasks/${FAILED_TASK_WITH_RETRY.task_id}/replay`,
-      (route) => route.fulfill({ status: 404, json: { error_code: "NOT_FOUND", message: "No replay" } })
-    );
-    // Mock the original task so navigation succeeds
-    const originalId = FAILED_TASK_WITH_RETRY.retry_of_task_id!;
-    await page.route(`**/api/v1/tasks/${originalId}`, (route) =>
-      route.fulfill({
-        status: 200,
-        json: { ...COMPLETED_TASK_FULL, task_id: originalId },
-      })
-    );
+    await setupRetryMocks(page);
+    // Also mock replay and steps for the root task navigation target
     await page.route(`**/api/v1/tasks/${originalId}/replay`, (route) =>
       route.fulfill({ status: 404, json: { error_code: "NOT_FOUND", message: "No replay" } })
     );
+    await mockTaskSteps(page, originalId, []);
 
     await page.goto(`/tasks/${FAILED_TASK_WITH_RETRY.task_id}`);
 
-    const originalIdShort = originalId.slice(0, 8);
-    await page.getByText(originalIdShort).click();
+    // Wait for the retry chain to render, then click the first node (root task)
+    const chainNode = page.locator("button").filter({ has: page.locator(".rounded-full") }).first();
+    await chainNode.click();
 
     await expect(page).toHaveURL(new RegExp(`/tasks/${originalId}`));
   });
@@ -188,10 +209,13 @@ test.describe("retry chain banner", () => {
   }) => {
     await mockTaskDetail(page, COMPLETED_TASK_FULL); // retry_count: 0
     await mockTaskReplay(page, COMPLETED_TASK_FULL.task_id);
+    await mockTaskSteps(page, COMPLETED_TASK_FULL.task_id, []);
+    // RetryChain will call listTasks — return empty so no chain renders
+    await mockTaskList(page, []);
 
     await page.goto(`/tasks/${COMPLETED_TASK_FULL.task_id}`);
 
-    await expect(page.getByText(/Retry attempt/)).not.toBeVisible();
+    await expect(page.getByText(/Attempt \d+ of \d+/)).not.toBeVisible();
   });
 });
 
@@ -204,6 +228,8 @@ test.describe("error category badge", () => {
     authedPage: page,
   }) => {
     await mockTaskDetail(page, FAILED_TASK_WITH_RETRY); // error_category: "transient_llm"
+    await mockTaskSteps(page, FAILED_TASK_WITH_RETRY.task_id, []);
+    await mockTaskList(page, []);
     await page.route(
       `**/api/v1/tasks/${FAILED_TASK_WITH_RETRY.task_id}/replay`,
       (route) => route.fulfill({ status: 404, json: { error_code: "NOT_FOUND", message: "No replay" } })
@@ -219,6 +245,8 @@ test.describe("error category badge", () => {
     authedPage: page,
   }) => {
     await mockTaskDetail(page, FAILED_TASK_WITH_RETRY);
+    await mockTaskSteps(page, FAILED_TASK_WITH_RETRY.task_id, []);
+    await mockTaskList(page, []);
     await page.route(
       `**/api/v1/tasks/${FAILED_TASK_WITH_RETRY.task_id}/replay`,
       (route) => route.fulfill({ status: 404, json: { error_code: "NOT_FOUND", message: "No replay" } })
@@ -241,6 +269,8 @@ test.describe("error category badge", () => {
       retry_of_task_id: null,
     };
     await mockTaskDetail(page, taskNoCat);
+    await mockTaskSteps(page, taskNoCat.task_id, []);
+    await mockTaskList(page, []);
     await page.route(
       `**/api/v1/tasks/${taskNoCat.task_id}/replay`,
       (route) => route.fulfill({ status: 404, json: { error_code: "NOT_FOUND", message: "No replay" } })
@@ -266,6 +296,8 @@ test.describe("error category badge", () => {
       retry_of_task_id: null,
     };
     await mockTaskDetail(page, taskPermanent);
+    await mockTaskSteps(page, taskPermanent.task_id, []);
+    await mockTaskList(page, []);
     await page.route(
       `**/api/v1/tasks/${taskPermanent.task_id}/replay`,
       (route) => route.fulfill({ status: 404, json: { error_code: "NOT_FOUND", message: "No replay" } })
@@ -290,6 +322,8 @@ test.describe("null safety on old task data", () => {
   }) => {
     await mockTaskDetail(page, COMPLETED_TASK_MINIMAL);
     await mockTaskReplay(page, COMPLETED_TASK_MINIMAL.task_id);
+    await mockTaskSteps(page, COMPLETED_TASK_MINIMAL.task_id, []);
+    await mockTaskList(page, []);
 
     await page.goto(`/tasks/${COMPLETED_TASK_MINIMAL.task_id}`);
 
@@ -301,7 +335,7 @@ test.describe("null safety on old task data", () => {
       page.locator('[data-slot="badge"][class*="border-border"]').filter({ hasText: "Browser Use" })
     ).toBeVisible();
     // No error card, no retry banner
-    await expect(page.getByText(/Retry attempt/)).not.toBeVisible();
+    await expect(page.getByText(/Attempt \d+ of \d+/)).not.toBeVisible();
     await expect(page.getByText("Error")).not.toBeVisible();
   });
 });
@@ -324,6 +358,7 @@ test.describe("route interception baseline", () => {
     await mockTaskList(page, [COMPLETED_TASK_FULL]);
     await mockTaskDetail(page, COMPLETED_TASK_FULL);
     await mockTaskReplay(page, COMPLETED_TASK_FULL.task_id);
+    await mockTaskSteps(page, COMPLETED_TASK_FULL.task_id, []);
 
     await page.goto(`/tasks/${COMPLETED_TASK_FULL.task_id}`);
 

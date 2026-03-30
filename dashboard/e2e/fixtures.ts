@@ -6,7 +6,7 @@
  */
 
 import { test as base, expect, type Page } from "@playwright/test";
-import type { TaskResponse, TaskListResponse, SessionResponse } from "../src/lib/types";
+import type { TaskResponse, TaskListResponse, StepResponse, SessionResponse } from "../src/lib/types";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -235,6 +235,91 @@ export async function mockTaskCreate(
     route.fulfill({ status: 201, json: response });
   });
 }
+
+/**
+ * Intercepts GET /api/v1/tasks/:id/steps and returns the supplied steps.
+ */
+export async function mockTaskSteps(
+  page: Page,
+  taskId: string,
+  steps: StepResponse[]
+): Promise<void> {
+  await page.route(`**/api/v1/tasks/${taskId}/steps`, (route) => {
+    if (route.request().method() !== "GET") {
+      route.fallback();
+      return;
+    }
+    route.fulfill({ status: 200, json: steps });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Step fixtures
+// ---------------------------------------------------------------------------
+
+/** Sample steps for a completed 5-step task. Mix of action types and success/failure. */
+export const SAMPLE_STEPS: StepResponse[] = [
+  {
+    step_number: 1,
+    action_type: "navigate",
+    description: "Navigate to example.com homepage",
+    screenshot_url: null, // no screenshot — old task
+    tokens_in: 300,
+    tokens_out: 150,
+    duration_ms: 1_200,
+    success: true,
+    error: null,
+    created_at: "2025-03-28T10:00:01.000Z",
+  },
+  {
+    step_number: 2,
+    action_type: "click",
+    description: "Click the login button in the top navigation bar",
+    screenshot_url: "https://r2.computeruse.dev/replays/aaaa0001/step_2.png?signed=true",
+    tokens_in: 250,
+    tokens_out: 180,
+    duration_ms: 800,
+    success: true,
+    error: null,
+    created_at: "2025-03-28T10:00:02.000Z",
+  },
+  {
+    step_number: 3,
+    action_type: "type",
+    description: "Type username into the email input field",
+    screenshot_url: "https://r2.computeruse.dev/replays/aaaa0001/step_3.png?signed=true",
+    tokens_in: 280,
+    tokens_out: 200,
+    duration_ms: 600,
+    success: true,
+    error: null,
+    created_at: "2025-03-28T10:00:03.000Z",
+  },
+  {
+    step_number: 4,
+    action_type: "click",
+    description: "Click the submit button to log in",
+    screenshot_url: "https://r2.computeruse.dev/replays/aaaa0001/step_4.png?signed=true",
+    tokens_in: 200,
+    tokens_out: 120,
+    duration_ms: 2_500,
+    success: false,
+    error: "Element not found after timeout",
+    created_at: "2025-03-28T10:00:06.000Z",
+  },
+  {
+    step_number: 5,
+    action_type: "extract",
+    description: "Extract page heading text from DOM",
+    screenshot_url: null,
+    tokens_in: 170,
+    tokens_out: 150,
+    duration_ms: 400,
+    success: true,
+    error: null,
+    created_at: "2025-03-28T10:00:07.000Z",
+  },
+];
 
 // ---------------------------------------------------------------------------
 // Session route mocking helpers

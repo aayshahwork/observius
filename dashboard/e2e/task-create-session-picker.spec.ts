@@ -142,33 +142,7 @@ test.describe("Form submission with session picker", () => {
   test("POST body includes session_id when a session is selected", async ({
     authedPage: page,
   }) => {
-    let capturedBody: Record<string, unknown> = {};
-
-    await page.route("**/api/v1/tasks", (route) => {
-      if (route.request().method() !== "POST") {
-        route.fallback();
-        return;
-      }
-      capturedBody = JSON.parse(route.request().postData() ?? "{}");
-      route.fulfill({ status: 201, json: COMPLETED_TASK_FULL });
-    });
-    await page.route("**/api/v1/tasks?limit=1", (route) =>
-      route.fulfill({
-        status: 200,
-        json: { tasks: [], total: 0, has_more: false },
-      })
-    );
-    await page.route("**/api/v1/tasks?*", (route) => {
-      const url = route.request().url();
-      if (url.includes("limit=1")) {
-        route.fulfill({
-          status: 200,
-          json: { tasks: [], total: 0, has_more: false },
-        });
-        return;
-      }
-      route.fallback();
-    });
+    await mockTaskList(page, []);
     await mockSessionList(page, ALL_SESSIONS);
     // Mock redirect target
     await page.route(`**/api/v1/tasks/${COMPLETED_TASK_FULL.task_id}`, (route) =>
@@ -177,6 +151,15 @@ test.describe("Form submission with session picker", () => {
     await page.route(`**/api/v1/tasks/${COMPLETED_TASK_FULL.task_id}/replay`, (route) =>
       route.fulfill({ status: 404, json: { error_code: "NOT_FOUND", message: "No replay" } })
     );
+
+    // Capture the POST request — register AFTER mockTaskList so this takes priority
+    await page.route("**/api/v1/tasks", (route) => {
+      if (route.request().method() !== "POST") {
+        route.fallback();
+        return;
+      }
+      route.fulfill({ status: 201, json: COMPLETED_TASK_FULL });
+    });
 
     await page.goto("/tasks/new");
 
@@ -189,11 +172,22 @@ test.describe("Form submission with session picker", () => {
     await page.getByText("Auto — no session").click();
     await page.getByRole("option").filter({ hasText: "github.com" }).click();
 
-    await page.getByRole("button", { name: "Create Task" }).click();
+    // Capture the POST via waitForRequest
+    const createBtn = page.getByRole("button", { name: "Create Task" });
+    await createBtn.scrollIntoViewIfNeeded();
 
-    await expect(page).toHaveURL(/\/tasks\//);
+    const [request] = await Promise.all([
+      page.waitForRequest(
+        (req) =>
+          req.url().includes("/api/v1/tasks") &&
+          !req.url().includes("?") &&
+          req.method() === "POST"
+      ),
+      createBtn.click(),
+    ]);
 
-    expect(capturedBody.session_id).toBe(ACTIVE_SESSION.session_id);
+    const body = JSON.parse(request.postData() ?? "{}");
+    expect(body.session_id).toBe(ACTIVE_SESSION.session_id);
   });
 
   test("POST body omits session_id when 'Auto' is selected", async ({

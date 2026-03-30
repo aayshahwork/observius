@@ -25,6 +25,10 @@ async function openNewTaskPage(page: Parameters<typeof mockTaskCreate>[0]) {
       json: { tasks: [], total: 0, has_more: false },
     })
   );
+  // Mock sessions endpoint (new task page fetches sessions on mount)
+  await page.route("**/api/v1/sessions", (route) =>
+    route.fulfill({ status: 200, json: [] })
+  );
   await mockTaskList(page, []);
   await page.goto("/tasks/new");
 }
@@ -178,12 +182,23 @@ test.describe("Form submission with advanced fields", () => {
   test("POST body includes executor_mode='native' when native radio selected", async ({
     authedPage: page,
   }) => {
-    await mockTaskCreate(page);
-    await mockTaskList(page, []);
-    await mockTaskDetail(page, COMPLETED_TASK_FULL);
-    await mockTaskReplay(page, COMPLETED_TASK_FULL.task_id);
+    let capturedBody: Record<string, unknown> = {};
 
+    await mockTaskList(page, []);
     await openNewTaskPage(page);
+
+    // Register POST handler LAST so it has LIFO priority
+    await page.route("**/api/v1/tasks", (route) => {
+      if (route.request().method() !== "POST") { route.fallback(); return; }
+      capturedBody = JSON.parse(route.request().postData() ?? "{}");
+      route.fulfill({ status: 201, json: COMPLETED_TASK_FULL });
+    });
+    await page.route(`**/api/v1/tasks/${COMPLETED_TASK_FULL.task_id}`, (route) =>
+      route.fulfill({ status: 200, json: COMPLETED_TASK_FULL })
+    );
+    await page.route(`**/api/v1/tasks/${COMPLETED_TASK_FULL.task_id}/replay`, (route) =>
+      route.fulfill({ status: 404, json: { error_code: "NOT_FOUND", message: "No replay" } })
+    );
 
     await page.getByLabel("URL *").fill("https://example.com");
     await page.getByLabel("Task Description *").fill("Extract the heading");
@@ -191,24 +206,31 @@ test.describe("Form submission with advanced fields", () => {
     await page.getByRole("button", { name: "Advanced Options" }).click();
     await page.getByRole("radio", { name: "Native Claude CUA" }).click();
 
-    const [request] = await Promise.all([
-      page.waitForRequest((req) => req.url().includes("/api/v1/tasks") && req.method() === "POST"),
-      page.getByRole("button", { name: "Create Task" }).click(),
-    ]);
+    await page.getByRole("button", { name: "Create Task" }).click();
+    await expect(page).toHaveURL(/\/tasks\//);
 
-    const body = JSON.parse(request.postData() ?? "{}");
-    expect(body.executor_mode).toBe("native");
+    expect(capturedBody.executor_mode).toBe("native");
   });
 
   test("POST body includes max_cost_cents when a value is entered", async ({
     authedPage: page,
   }) => {
-    await mockTaskCreate(page);
-    await mockTaskList(page, []);
-    await mockTaskDetail(page, COMPLETED_TASK_FULL);
-    await mockTaskReplay(page, COMPLETED_TASK_FULL.task_id);
+    let capturedBody: Record<string, unknown> = {};
 
+    await mockTaskList(page, []);
     await openNewTaskPage(page);
+
+    await page.route("**/api/v1/tasks", (route) => {
+      if (route.request().method() !== "POST") { route.fallback(); return; }
+      capturedBody = JSON.parse(route.request().postData() ?? "{}");
+      route.fulfill({ status: 201, json: COMPLETED_TASK_FULL });
+    });
+    await page.route(`**/api/v1/tasks/${COMPLETED_TASK_FULL.task_id}`, (route) =>
+      route.fulfill({ status: 200, json: COMPLETED_TASK_FULL })
+    );
+    await page.route(`**/api/v1/tasks/${COMPLETED_TASK_FULL.task_id}/replay`, (route) =>
+      route.fulfill({ status: 404, json: { error_code: "NOT_FOUND", message: "No replay" } })
+    );
 
     await page.getByLabel("URL *").fill("https://example.com");
     await page.getByLabel("Task Description *").fill("Extract the heading");
@@ -216,13 +238,10 @@ test.describe("Form submission with advanced fields", () => {
     await page.getByRole("button", { name: "Advanced Options" }).click();
     await page.getByLabel("Max cost (cents)").fill("75");
 
-    const [request] = await Promise.all([
-      page.waitForRequest((req) => req.url().includes("/api/v1/tasks") && req.method() === "POST"),
-      page.getByRole("button", { name: "Create Task" }).click(),
-    ]);
+    await page.getByRole("button", { name: "Create Task" }).click();
+    await expect(page).toHaveURL(/\/tasks\//);
 
-    const body = JSON.parse(request.postData() ?? "{}");
-    expect(body.max_cost_cents).toBe(75);
+    expect(capturedBody.max_cost_cents).toBe(75);
   });
 
   test("POST body omits max_cost_cents when the field is left blank", async ({
@@ -262,23 +281,30 @@ test.describe("Form submission with advanced fields", () => {
   test("POST body defaults to executor_mode='browser_use' when not changed", async ({
     authedPage: page,
   }) => {
-    await mockTaskCreate(page);
-    await mockTaskList(page, []);
-    await mockTaskDetail(page, COMPLETED_TASK_FULL);
-    await mockTaskReplay(page, COMPLETED_TASK_FULL.task_id);
+    let capturedBody: Record<string, unknown> = {};
 
+    await mockTaskList(page, []);
     await openNewTaskPage(page);
+
+    await page.route("**/api/v1/tasks", (route) => {
+      if (route.request().method() !== "POST") { route.fallback(); return; }
+      capturedBody = JSON.parse(route.request().postData() ?? "{}");
+      route.fulfill({ status: 201, json: COMPLETED_TASK_FULL });
+    });
+    await page.route(`**/api/v1/tasks/${COMPLETED_TASK_FULL.task_id}`, (route) =>
+      route.fulfill({ status: 200, json: COMPLETED_TASK_FULL })
+    );
+    await page.route(`**/api/v1/tasks/${COMPLETED_TASK_FULL.task_id}/replay`, (route) =>
+      route.fulfill({ status: 404, json: { error_code: "NOT_FOUND", message: "No replay" } })
+    );
 
     await page.getByLabel("URL *").fill("https://example.com");
     await page.getByLabel("Task Description *").fill("Extract the heading");
 
-    const [request] = await Promise.all([
-      page.waitForRequest((req) => req.url().includes("/api/v1/tasks") && req.method() === "POST"),
-      page.getByRole("button", { name: "Create Task" }).click(),
-    ]);
+    await page.getByRole("button", { name: "Create Task" }).click();
+    await expect(page).toHaveURL(/\/tasks\//);
 
-    const body = JSON.parse(request.postData() ?? "{}");
-    expect(body.executor_mode).toBe("browser_use");
+    expect(capturedBody.executor_mode).toBe("browser_use");
   });
 });
 

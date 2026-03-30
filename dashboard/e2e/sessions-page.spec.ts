@@ -320,24 +320,35 @@ test.describe("Delete session via drawer", () => {
   test("confirming delete removes session from list", async ({
     authedPage: page,
   }) => {
-    await mockSessionDelete(page, ACTIVE_SESSION.session_id);
+    let deleted = false;
 
-    // After deletion, re-mock the session list without the deleted session
-    let callCount = 0;
     await page.route("**/api/v1/tasks?limit=1", (route) =>
       route.fulfill({
         status: 200,
         json: { tasks: [], total: 0, has_more: false },
       })
     );
+
+    // DELETE handler flips the flag
+    await page.route(`**/api/v1/sessions/${ACTIVE_SESSION.session_id}`, (route) => {
+      if (route.request().method() !== "DELETE") {
+        route.fallback();
+        return;
+      }
+      deleted = true;
+      route.fulfill({
+        status: 200,
+        json: { session_id: ACTIVE_SESSION.session_id, message: "Session deleted" },
+      });
+    });
+
+    // GET returns different data before and after delete
     await page.route("**/api/v1/sessions", (route) => {
       if (route.request().method() !== "GET") {
         route.fallback();
         return;
       }
-      callCount++;
-      // First call: all sessions. Second call (after delete): without active.
-      const sessions = callCount <= 1 ? ALL_SESSIONS : [STALE_SESSION, EXPIRED_SESSION];
+      const sessions = deleted ? [STALE_SESSION, EXPIRED_SESSION] : ALL_SESSIONS;
       route.fulfill({ status: 200, json: sessions });
     });
     await mockTaskList(page, []);
