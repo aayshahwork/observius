@@ -45,6 +45,19 @@ export interface TaskListResponse {
   has_more: boolean;
 }
 
+export interface StepResponse {
+  step_number: number;
+  action_type: string;
+  description: string | null;
+  screenshot_url: string | null;
+  tokens_in: number;
+  tokens_out: number;
+  duration_ms: number;
+  success: boolean;
+  error: string | null;
+  created_at: string | null;
+}
+
 export interface TaskCreateRequest {
   url: string;
   task: string;

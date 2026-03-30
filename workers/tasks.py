@@ -283,6 +283,9 @@ def _persist_result(task_id: str, result: Any, config_dict: dict) -> None:
             except Exception as exc:
                 logger.warning("Replay upload failed for task %s: %s", task_id, exc)
 
+        # Upload individual step screenshots to R2 in parallel
+        screenshot_keys = _upload_step_screenshots(task_id, result.step_data)
+
         # Insert step data
         for step in result.step_data:
             task_step = TaskStep(
@@ -290,6 +293,7 @@ def _persist_result(task_id: str, result: Any, config_dict: dict) -> None:
                 step_number=step.step_number,
                 action_type=str(step.action_type),
                 description=step.description[:500] if step.description else None,
+                screenshot_s3_key=screenshot_keys.get(step.step_number),
                 llm_tokens_in=step.tokens_in,
                 llm_tokens_out=step.tokens_out,
                 duration_ms=step.duration_ms,
@@ -448,6 +452,69 @@ def _maybe_auto_retry(
         logger.exception("Failed to auto-retry task %s", task_id)
     finally:
         session.close()
+
+
+# ---------------------------------------------------------------------------
+# Step screenshot upload
+# ---------------------------------------------------------------------------
+
+
+def _upload_step_screenshots(task_id: str, step_data: list) -> Dict[int, str]:
+    """Upload individual step screenshots to R2 in parallel.
+
+    Returns a mapping of step_number -> S3 key for successfully uploaded
+    screenshots.  Steps without screenshot data are skipped.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    import boto3
+
+    steps_with_screenshots = [s for s in step_data if s.screenshot_bytes]
+    if not steps_with_screenshots:
+        return {}
+
+    s3 = boto3.client(
+        "s3",
+        endpoint_url=worker_settings.R2_ENDPOINT or None,
+        aws_access_key_id=worker_settings.R2_ACCESS_KEY,
+        aws_secret_access_key=worker_settings.R2_SECRET_KEY,
+    )
+
+    def _upload_one(step: Any) -> tuple[int, str]:
+        key = f"replays/{task_id}/step_{step.step_number}.png"
+        s3.put_object(
+            Bucket=worker_settings.R2_BUCKET_NAME,
+            Key=key,
+            Body=step.screenshot_bytes,
+            ContentType="image/png",
+            CacheControl="public, max-age=604800",
+        )
+        return step.step_number, key
+
+    results: Dict[int, str] = {}
+    max_workers = min(len(steps_with_screenshots), 8)
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {pool.submit(_upload_one, s): s for s in steps_with_screenshots}
+        for future in as_completed(futures):
+            try:
+                step_num, key = future.result()
+                results[step_num] = key
+            except Exception as exc:
+                step = futures[future]
+                logger.warning(
+                    "Screenshot upload failed for task %s step %d: %s",
+                    task_id,
+                    step.step_number,
+                    exc,
+                )
+
+    logger.info(
+        "Uploaded %d/%d step screenshots for task %s",
+        len(results),
+        len(steps_with_screenshots),
+        task_id,
+    )
+    return results
 
 
 # ---------------------------------------------------------------------------

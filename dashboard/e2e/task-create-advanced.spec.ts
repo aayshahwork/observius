@@ -10,7 +10,7 @@
  *  - Form submits without those fields when advanced section is left at defaults
  */
 
-import { test, expect, mockTaskCreate, mockTaskList, COMPLETED_TASK_FULL } from "./fixtures";
+import { test, expect, mockTaskCreate, mockTaskList, mockTaskDetail, mockTaskReplay, COMPLETED_TASK_FULL } from "./fixtures";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -178,63 +178,35 @@ test.describe("Form submission with advanced fields", () => {
   test("POST body includes executor_mode='native' when native radio selected", async ({
     authedPage: page,
   }) => {
-    let capturedBody: Record<string, unknown> = {};
-
-    await page.route("**/api/v1/tasks", (route) => {
-      if (route.request().method() !== "POST") {
-        route.continue();
-        return;
-      }
-      capturedBody = JSON.parse(route.request().postData() ?? "{}");
-      route.fulfill({ status: 201, json: COMPLETED_TASK_FULL });
-    });
-    // Mock the redirect target
+    await mockTaskCreate(page);
     await mockTaskList(page, []);
-    await page.route(`**/api/v1/tasks/${COMPLETED_TASK_FULL.task_id}`, (route) =>
-      route.fulfill({ status: 200, json: COMPLETED_TASK_FULL })
-    );
-    await page.route(`**/api/v1/tasks/${COMPLETED_TASK_FULL.task_id}/replay`, (route) =>
-      route.fulfill({ status: 404, json: { error_code: "NOT_FOUND", message: "No replay" } })
-    );
+    await mockTaskDetail(page, COMPLETED_TASK_FULL);
+    await mockTaskReplay(page, COMPLETED_TASK_FULL.task_id);
 
     await openNewTaskPage(page);
 
-    // Fill required fields
     await page.getByLabel("URL *").fill("https://example.com");
     await page.getByLabel("Task Description *").fill("Extract the heading");
 
-    // Open advanced and pick native
     await page.getByRole("button", { name: "Advanced Options" }).click();
     await page.getByRole("radio", { name: "Native Claude CUA" }).click();
 
-    await page.getByRole("button", { name: "Create Task" }).click();
+    const [request] = await Promise.all([
+      page.waitForRequest((req) => req.url().includes("/api/v1/tasks") && req.method() === "POST"),
+      page.getByRole("button", { name: "Create Task" }).click(),
+    ]);
 
-    // Wait for navigation away from /tasks/new
-    await expect(page).toHaveURL(/\/tasks\//);
-
-    expect(capturedBody.executor_mode).toBe("native");
+    const body = JSON.parse(request.postData() ?? "{}");
+    expect(body.executor_mode).toBe("native");
   });
 
   test("POST body includes max_cost_cents when a value is entered", async ({
     authedPage: page,
   }) => {
-    let capturedBody: Record<string, unknown> = {};
-
-    await page.route("**/api/v1/tasks", (route) => {
-      if (route.request().method() !== "POST") {
-        route.continue();
-        return;
-      }
-      capturedBody = JSON.parse(route.request().postData() ?? "{}");
-      route.fulfill({ status: 201, json: COMPLETED_TASK_FULL });
-    });
+    await mockTaskCreate(page);
     await mockTaskList(page, []);
-    await page.route(`**/api/v1/tasks/${COMPLETED_TASK_FULL.task_id}`, (route) =>
-      route.fulfill({ status: 200, json: COMPLETED_TASK_FULL })
-    );
-    await page.route(`**/api/v1/tasks/${COMPLETED_TASK_FULL.task_id}/replay`, (route) =>
-      route.fulfill({ status: 404, json: { error_code: "NOT_FOUND", message: "No replay" } })
-    );
+    await mockTaskDetail(page, COMPLETED_TASK_FULL);
+    await mockTaskReplay(page, COMPLETED_TASK_FULL.task_id);
 
     await openNewTaskPage(page);
 
@@ -244,11 +216,13 @@ test.describe("Form submission with advanced fields", () => {
     await page.getByRole("button", { name: "Advanced Options" }).click();
     await page.getByLabel("Max cost (cents)").fill("75");
 
-    await page.getByRole("button", { name: "Create Task" }).click();
+    const [request] = await Promise.all([
+      page.waitForRequest((req) => req.url().includes("/api/v1/tasks") && req.method() === "POST"),
+      page.getByRole("button", { name: "Create Task" }).click(),
+    ]);
 
-    await expect(page).toHaveURL(/\/tasks\//);
-
-    expect(capturedBody.max_cost_cents).toBe(75);
+    const body = JSON.parse(request.postData() ?? "{}");
+    expect(body.max_cost_cents).toBe(75);
   });
 
   test("POST body omits max_cost_cents when the field is left blank", async ({
@@ -288,34 +262,23 @@ test.describe("Form submission with advanced fields", () => {
   test("POST body defaults to executor_mode='browser_use' when not changed", async ({
     authedPage: page,
   }) => {
-    let capturedBody: Record<string, unknown> = {};
-
-    await page.route("**/api/v1/tasks", (route) => {
-      if (route.request().method() !== "POST") {
-        route.continue();
-        return;
-      }
-      capturedBody = JSON.parse(route.request().postData() ?? "{}");
-      route.fulfill({ status: 201, json: COMPLETED_TASK_FULL });
-    });
+    await mockTaskCreate(page);
     await mockTaskList(page, []);
-    await page.route(`**/api/v1/tasks/${COMPLETED_TASK_FULL.task_id}`, (route) =>
-      route.fulfill({ status: 200, json: COMPLETED_TASK_FULL })
-    );
-    await page.route(`**/api/v1/tasks/${COMPLETED_TASK_FULL.task_id}/replay`, (route) =>
-      route.fulfill({ status: 404, json: { error_code: "NOT_FOUND", message: "No replay" } })
-    );
+    await mockTaskDetail(page, COMPLETED_TASK_FULL);
+    await mockTaskReplay(page, COMPLETED_TASK_FULL.task_id);
 
     await openNewTaskPage(page);
 
     await page.getByLabel("URL *").fill("https://example.com");
     await page.getByLabel("Task Description *").fill("Extract the heading");
 
-    await page.getByRole("button", { name: "Create Task" }).click();
+    const [request] = await Promise.all([
+      page.waitForRequest((req) => req.url().includes("/api/v1/tasks") && req.method() === "POST"),
+      page.getByRole("button", { name: "Create Task" }).click(),
+    ]);
 
-    await expect(page).toHaveURL(/\/tasks\//);
-
-    expect(capturedBody.executor_mode).toBe("browser_use");
+    const body = JSON.parse(request.postData() ?? "{}");
+    expect(body.executor_mode).toBe("browser_use");
   });
 });
 

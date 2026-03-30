@@ -76,6 +76,23 @@ class TaskListResponse(BaseModel):
     has_more: bool
 
 
+class StepResponse(BaseModel):
+    """Single step within a task execution."""
+
+    step_number: int
+    action_type: str
+    description: str | None = None
+    screenshot_url: str | None = None
+    tokens_in: int = 0
+    tokens_out: int = 0
+    duration_ms: int = 0
+    success: bool = True
+    error: str | None = None
+    created_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class ErrorResponse(BaseModel):
     """Standard error response body."""
 

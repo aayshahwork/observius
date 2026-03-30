@@ -6,7 +6,7 @@
  */
 
 import { test as base, expect, type Page } from "@playwright/test";
-import type { TaskResponse, TaskListResponse } from "../src/lib/types";
+import type { TaskResponse, TaskListResponse, SessionResponse } from "../src/lib/types";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -16,7 +16,7 @@ export const FAKE_API_KEY = "sk-test-fake-key-for-e2e";
 
 /** A completed task that has all new fields populated. */
 export const COMPLETED_TASK_FULL: TaskResponse = {
-  task_id: "01900000-0000-7000-8000-000000000001",
+  task_id: "aaaa0001-0000-7000-8000-000000000001",
   url: "https://example.com",
   status: "completed",
   success: true,
@@ -38,7 +38,7 @@ export const COMPLETED_TASK_FULL: TaskResponse = {
 
 /** A failed task with all error-related fields populated. */
 export const FAILED_TASK_WITH_RETRY: TaskResponse = {
-  task_id: "01900000-0000-7000-8000-000000000002",
+  task_id: "bbbb0002-0000-7000-8000-000000000002",
   url: "https://example.com/login",
   status: "failed",
   success: false,
@@ -50,7 +50,7 @@ export const FAILED_TASK_WITH_RETRY: TaskResponse = {
   created_at: "2025-03-28T09:00:00.000Z",
   completed_at: "2025-03-28T09:00:04.000Z",
   retry_count: 2,
-  retry_of_task_id: "01900000-0000-7000-8000-000000000099",
+  retry_of_task_id: "eeee0099-0000-7000-8000-000000000099",
   error_category: "transient_llm",
   cost_cents: 1,
   total_tokens_in: 400,
@@ -60,7 +60,7 @@ export const FAILED_TASK_WITH_RETRY: TaskResponse = {
 
 /** A task with no optional fields — simulates old data before the new columns. */
 export const COMPLETED_TASK_MINIMAL: TaskResponse = {
-  task_id: "01900000-0000-7000-8000-000000000003",
+  task_id: "cccc0003-0000-7000-8000-000000000003",
   url: null,
   status: "completed",
   success: true,
@@ -82,7 +82,7 @@ export const COMPLETED_TASK_MINIMAL: TaskResponse = {
 
 /** A native-executor task used to verify the "N" badge in the table. */
 export const NATIVE_TASK: TaskResponse = {
-  task_id: "01900000-0000-7000-8000-000000000004",
+  task_id: "dddd0004-0000-7000-8000-000000000004",
   url: "https://native.example.com",
   status: "completed",
   success: true,
@@ -101,6 +101,47 @@ export const NATIVE_TASK: TaskResponse = {
   total_tokens_out: 1_800,
   executor_mode: "native",
 };
+
+// ---------------------------------------------------------------------------
+// Session fixtures
+// ---------------------------------------------------------------------------
+
+/** An active (authenticated) session, last used recently. */
+export const ACTIVE_SESSION: SessionResponse = {
+  session_id: "sess-0001-0000-0000-000000000001",
+  origin_domain: "github.com",
+  auth_state: "active",
+  last_used_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
+  expires_at: new Date(Date.now() + 7 * 86400_000).toISOString(),
+  created_at: "2025-03-20T10:00:00.000Z",
+};
+
+/** A stale session — credentials may need re-auth. */
+export const STALE_SESSION: SessionResponse = {
+  session_id: "sess-0002-0000-0000-000000000002",
+  origin_domain: "app.slack.com",
+  auth_state: "stale",
+  last_used_at: new Date(Date.now() - 10 * 86400_000).toISOString(), // 10 days ago
+  expires_at: new Date(Date.now() - 86400_000).toISOString(),
+  created_at: "2025-03-10T08:00:00.000Z",
+};
+
+/** An expired session. */
+export const EXPIRED_SESSION: SessionResponse = {
+  session_id: "sess-0003-0000-0000-000000000003",
+  origin_domain: "mail.google.com",
+  auth_state: "expired",
+  last_used_at: new Date(Date.now() - 30 * 86400_000).toISOString(), // 30 days ago
+  expires_at: new Date(Date.now() - 20 * 86400_000).toISOString(),
+  created_at: "2025-02-15T12:00:00.000Z",
+};
+
+/** All three sessions for testing the full list. */
+export const ALL_SESSIONS: SessionResponse[] = [
+  ACTIVE_SESSION,
+  STALE_SESSION,
+  EXPIRED_SESSION,
+];
 
 // ---------------------------------------------------------------------------
 // Auth helper
@@ -137,9 +178,10 @@ export async function mockTaskList(
     route.fulfill({ status: 200, json: payload })
   );
   // Also match the bare endpoint (no query string).
+  // Use fallback() for non-GET so POST handlers registered elsewhere still fire.
   await page.route("**/api/v1/tasks", (route) => {
     if (route.request().method() !== "GET") {
-      route.continue();
+      route.fallback();
       return;
     }
     route.fulfill({ status: 200, json: payload });
@@ -191,6 +233,45 @@ export async function mockTaskCreate(
       return;
     }
     route.fulfill({ status: 201, json: response });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Session route mocking helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Intercepts GET /api/v1/sessions and returns the supplied sessions.
+ */
+export async function mockSessionList(
+  page: Page,
+  sessions: SessionResponse[]
+): Promise<void> {
+  await page.route("**/api/v1/sessions", (route) => {
+    if (route.request().method() !== "GET") {
+      route.fallback();
+      return;
+    }
+    route.fulfill({ status: 200, json: sessions });
+  });
+}
+
+/**
+ * Intercepts DELETE /api/v1/sessions/:id and returns success.
+ */
+export async function mockSessionDelete(
+  page: Page,
+  sessionId: string
+): Promise<void> {
+  await page.route(`**/api/v1/sessions/${sessionId}`, (route) => {
+    if (route.request().method() !== "DELETE") {
+      route.fallback();
+      return;
+    }
+    route.fulfill({
+      status: 200,
+      json: { session_id: sessionId, message: "Session deleted" },
+    });
   });
 }
 

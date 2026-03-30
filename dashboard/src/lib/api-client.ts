@@ -3,6 +3,7 @@ import type {
   TaskResponse,
   TaskListResponse,
   TaskCreateRequest,
+  StepResponse,
   SessionResponse,
   ReplayResponse,
   ErrorResponse,
@@ -63,6 +64,7 @@ export class ApiClient {
     status?: string;
     since?: string;
     session_id?: string;
+    retry_of_task_id?: string;
   }): Promise<TaskListResponse> {
     const qs = new URLSearchParams();
     if (params?.limit) qs.set("limit", String(params.limit));
@@ -70,6 +72,7 @@ export class ApiClient {
     if (params?.status) qs.set("status", params.status);
     if (params?.since) qs.set("since", params.since);
     if (params?.session_id) qs.set("session_id", params.session_id);
+    if (params?.retry_of_task_id) qs.set("retry_of_task_id", params.retry_of_task_id);
     const query = qs.toString();
     return apiCall<TaskListResponse>(
       `/api/v1/tasks${query ? `?${query}` : ""}`,
@@ -103,6 +106,12 @@ export class ApiClient {
   async retryTask(taskId: string): Promise<TaskResponse> {
     return apiCall<TaskResponse>(`/api/v1/tasks/${taskId}/retry`, {
       method: "POST",
+      headers: this.headers,
+    });
+  }
+
+  async getTaskSteps(taskId: string): Promise<StepResponse[]> {
+    return apiCall<StepResponse[]>(`/api/v1/tasks/${taskId}/steps`, {
       headers: this.headers,
     });
   }

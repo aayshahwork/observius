@@ -27,7 +27,8 @@ from api.dependencies import get_db, get_redis
 from api.middleware.auth import get_current_account
 from api.models.account import Account
 from api.models.task import Task
-from api.schemas.task import ErrorResponse, TaskCreateRequest, TaskListResponse, TaskResponse
+from api.models.task_step import TaskStep
+from api.schemas.task import ErrorResponse, StepResponse, TaskCreateRequest, TaskListResponse, TaskResponse
 from shared.constants import TIER_LIMITS
 from api.services.audit_logger import TASK_CANCELLED, TASK_CREATED, TASK_RETRIED, AuditLogger
 from shared.url_validator import SSRFBlockedError, validate_url_async, validate_webhook_url
@@ -232,6 +233,7 @@ async def list_tasks(
     task_status: str | None = Query(default=None, alias="status"),
     since: datetime | None = Query(default=None),
     session_id: uuid.UUID | None = Query(default=None),
+    retry_of_task_id: uuid.UUID | None = Query(default=None),
     account: Account = Depends(get_current_account),
     db: AsyncSession = Depends(get_db),
 ) -> TaskListResponse:
@@ -244,6 +246,8 @@ async def list_tasks(
         base = base.where(Task.created_at >= since)
     if session_id:
         base = base.where(Task.session_id == session_id)
+    if retry_of_task_id:
+        base = base.where(Task.retry_of_task_id == retry_of_task_id)
 
     # Total count
     count_stmt = select(func.count()).select_from(base.subquery())
@@ -351,6 +355,7 @@ async def retry_task(
             },
         )
 
+    root_id = original.retry_of_task_id or original.id
     new_task = Task(
         id=uuid.uuid4(),
         account_id=account.id,
@@ -362,6 +367,8 @@ async def retry_task(
         max_cost_cents=original.max_cost_cents,
         session_id=original.session_id,
         executor_mode=original.executor_mode or "browser_use",
+        retry_of_task_id=root_id,
+        retry_count=(original.retry_count or 0) + 1,
         created_at=datetime.now(timezone.utc),
     )
     db.add(new_task)
@@ -404,6 +411,59 @@ async def retry_task(
 
     logger.info("task_retried", original_id=str(task_id), new_id=str(new_task.id))
     return _task_to_response(new_task)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/tasks/{task_id}/steps
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/{task_id}/steps",
+    response_model=list[StepResponse],
+    responses={404: {"model": ErrorResponse}},
+)
+async def get_task_steps(
+    task_id: uuid.UUID,
+    account: Account = Depends(get_current_account),
+    db: AsyncSession = Depends(get_db),
+) -> list[StepResponse]:
+    """Return step-level data for a task, including screenshot URLs."""
+    # Verify task belongs to account
+    task_stmt = select(Task).where(Task.id == task_id, Task.account_id == account.id)
+    task_result = await db.execute(task_stmt)
+    if task_result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error_code": "NOT_FOUND", "message": "Task not found."},
+        )
+
+    stmt = (
+        select(TaskStep)
+        .where(TaskStep.task_id == task_id)
+        .order_by(TaskStep.step_number)
+    )
+    result = await db.execute(stmt)
+    steps = result.scalars().all()
+
+    return [
+        StepResponse(
+            step_number=s.step_number,
+            action_type=s.action_type,
+            description=s.description,
+            screenshot_url=(
+                f"https://r2.computeruse.dev/{s.screenshot_s3_key}?signed=true"
+                if s.screenshot_s3_key
+                else None
+            ),
+            tokens_in=s.llm_tokens_in or 0,
+            tokens_out=s.llm_tokens_out or 0,
+            duration_ms=s.duration_ms or 0,
+            success=s.success if s.success is not None else True,
+            error=s.error_message,
+            created_at=s.created_at,
+        )
+        for s in steps
+    ]
 
 
 # ---------------------------------------------------------------------------

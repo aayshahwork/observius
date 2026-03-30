@@ -38,7 +38,7 @@ test.describe("executor mode badge", () => {
     ).toBeVisible();
 
     // Find the outline badge adjacent to the status badge
-    const badge = page.locator('[data-slot="badge"][class*="outline"]').filter({
+    const badge = page.locator('[data-slot="badge"][class*="border-border"]').filter({
       hasText: "Browser Use",
     });
     await expect(badge).toBeVisible();
@@ -55,7 +55,7 @@ test.describe("executor mode badge", () => {
 
     await page.goto(`/tasks/${FAILED_TASK_WITH_RETRY.task_id}`);
 
-    const badge = page.locator('[data-slot="badge"][class*="outline"]').filter({
+    const badge = page.locator('[data-slot="badge"][class*="border-border"]').filter({
       hasText: "Native",
     });
     await expect(badge).toBeVisible();
@@ -298,7 +298,7 @@ test.describe("null safety on old task data", () => {
     await expect(page.getByText(COMPLETED_TASK_MINIMAL.task_id)).toBeVisible();
     // Executor mode badge defaults to "Browser Use"
     await expect(
-      page.locator('[data-slot="badge"][class*="outline"]').filter({ hasText: "Browser Use" })
+      page.locator('[data-slot="badge"][class*="border-border"]').filter({ hasText: "Browser Use" })
     ).toBeVisible();
     // No error card, no retry banner
     await expect(page.getByText(/Retry attempt/)).not.toBeVisible();

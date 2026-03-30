@@ -60,6 +60,7 @@ export function SessionDrawer({ session, open, onOpenChange, onDeleted }: Sessio
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const fetchRecentTasks = useCallback(async () => {
     if (!client || !session) return;
@@ -82,6 +83,7 @@ export function SessionDrawer({ session, open, onOpenChange, onDeleted }: Sessio
   useEffect(() => {
     if (open && session) {
       fetchRecentTasks();
+      setDeleteError(null);
     } else {
       setRecentTasks([]);
       setTaskTotal(0);
@@ -91,13 +93,14 @@ export function SessionDrawer({ session, open, onOpenChange, onDeleted }: Sessio
   const handleDelete = async () => {
     if (!client || !session) return;
     setDeleting(true);
+    setDeleteError(null);
     try {
       await client.deleteSession(session.session_id);
       setConfirmDelete(false);
       onOpenChange(false);
       onDeleted();
-    } catch {
-      // Error is non-critical here — user can retry
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete session");
     } finally {
       setDeleting(false);
     }
@@ -210,6 +213,11 @@ export function SessionDrawer({ session, open, onOpenChange, onDeleted }: Sessio
           </div>
 
           <SheetFooter>
+            {deleteError && (
+              <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-xs text-destructive">
+                {deleteError}
+              </div>
+            )}
             <Button
               variant="destructive"
               className="w-full"

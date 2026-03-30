@@ -16,6 +16,15 @@ Monorepo: Python backend (FastAPI + Celery) + TypeScript frontend (Next.js).
 - Credentials: AES-256-GCM with HKDF-derived per-account keys
 - Testing: pytest + pytest-asyncio (backend), vitest (frontend)
 
+## Dashboard Routes
+- /overview — health dashboard (overview/page.tsx)
+- /tasks — task list
+- /tasks/[id] — task detail + replay
+- /tasks/new — create task
+- /sessions — session management
+- /usage — cost/token analytics
+- /settings — API keys, billing
+
 ## Directory Structure
 ```
 /api          - FastAPI app (routes, models, middleware, services, migrations)
