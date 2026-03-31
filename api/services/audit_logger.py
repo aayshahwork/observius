@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 TASK_CREATED = "task.created"
 TASK_CANCELLED = "task.cancelled"
 TASK_RETRIED = "task.retried"
+TASK_INGESTED = "task.ingested"
 API_KEY_CREATED = "api_key.created"
 API_KEY_REVOKED = "api_key.revoked"
 SESSION_DELETED = "session.deleted"

@@ -464,14 +464,20 @@ def _upload_step_screenshots(task_id: str, step_data: list) -> Dict[int, str]:
 
     Returns a mapping of step_number -> S3 key for successfully uploaded
     screenshots.  Steps without screenshot data are skipped.
+    Falls back to local filesystem when R2 is not configured.
     """
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-
-    import boto3
+    from workers.config import is_r2_configured
 
     steps_with_screenshots = [s for s in step_data if s.screenshot_bytes]
     if not steps_with_screenshots:
         return {}
+
+    if not is_r2_configured():
+        return _save_step_screenshots_local(task_id, steps_with_screenshots)
+
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    import boto3
 
     s3 = boto3.client(
         "s3",
@@ -522,12 +528,15 @@ def _upload_step_screenshots(task_id: str, step_data: list) -> Dict[int, str]:
 # ---------------------------------------------------------------------------
 
 
-def _upload_replay(task_id: str, result: Any) -> str:
-    """Generate HTML replay and upload to R2/S3. Returns the S3 key."""
+def _upload_replay(task_id: str, result: Any) -> str | None:
+    """Generate HTML replay and upload to R2/S3. Returns the S3 key.
+
+    Falls back to local filesystem when R2 is not configured.
+    Returns None only if generation itself fails.
+    """
     import tempfile
 
-    import boto3
-
+    from workers.config import is_r2_configured
     from workers.replay import ReplayGenerator
 
     replay_gen = ReplayGenerator(
@@ -538,6 +547,11 @@ def _upload_replay(task_id: str, result: Any) -> str:
             "success": result.success,
         },
     )
+
+    if not is_r2_configured():
+        return _save_replay_local(task_id, replay_gen)
+
+    import boto3
 
     with tempfile.TemporaryDirectory() as tmpdir:
         replay_path = f"{tmpdir}/{task_id}.html"
@@ -561,6 +575,51 @@ def _upload_replay(task_id: str, result: Any) -> str:
         )
 
     return s3_key
+
+
+# ---------------------------------------------------------------------------
+# Local filesystem fallback (dev mode, no R2)
+# ---------------------------------------------------------------------------
+
+LOCAL_REPLAYS_DIR = "replays"
+
+
+def _save_replay_local(task_id: str, replay_gen: Any) -> str:
+    """Save replay HTML to local filesystem. Returns a local:// key."""
+    import os
+
+    task_dir = os.path.join(LOCAL_REPLAYS_DIR, task_id)
+    os.makedirs(task_dir, exist_ok=True)
+
+    replay_path = os.path.join(task_dir, "replay.html")
+    replay_gen.generate(replay_path)
+
+    key = f"local://{task_dir}/replay.html"
+    logger.info("Replay saved locally for task %s (R2 not configured)", task_id)
+    return key
+
+
+def _save_step_screenshots_local(task_id: str, steps: list) -> Dict[int, str]:
+    """Save step screenshots to local filesystem. Returns step_number -> local:// key."""
+    import os
+
+    task_dir = os.path.join(LOCAL_REPLAYS_DIR, task_id)
+    os.makedirs(task_dir, exist_ok=True)
+
+    results: Dict[int, str] = {}
+    for step in steps:
+        filename = f"step_{step.step_number}.png"
+        filepath = os.path.join(task_dir, filename)
+        with open(filepath, "wb") as f:
+            f.write(step.screenshot_bytes)
+        results[step.step_number] = f"local://{task_dir}/{filename}"
+
+    logger.info(
+        "Saved %d step screenshots locally for task %s (R2 not configured)",
+        len(results),
+        task_id,
+    )
+    return results
 
 
 # ---------------------------------------------------------------------------

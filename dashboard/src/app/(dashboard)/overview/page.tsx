@@ -63,7 +63,7 @@ export default function OverviewPage() {
       const since = new Date();
       since.setDate(since.getDate() - 7);
       const [taskRes, sessionRes] = await Promise.all([
-        client.listTasks({ limit: 200, since: since.toISOString() }),
+        client.listTasks({ limit: 100, since: since.toISOString() }),
         client.listSessions(),
       ]);
       setTasks(taskRes.tasks);

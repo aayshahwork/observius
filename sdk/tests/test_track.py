@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import pytest
+from unittest.mock import patch
 
 from computeruse.models import ActionType
 from computeruse.track import TrackConfig, TrackedPage, track
@@ -1202,3 +1203,86 @@ class TestSequentialTracks:
         # Both have separate metadata files
         assert (tmp_path / ".observius" / "runs" / "run-1.json").exists()
         assert (tmp_path / ".observius" / "runs" / "run-2.json").exists()
+
+
+# ---------------------------------------------------------------------------
+# API reporting
+# ---------------------------------------------------------------------------
+
+
+class TestApiReporting:
+    """Tests for optional API reporting in track()."""
+
+    async def test_reports_on_success(self, tmp_path):
+        page = MockPage()
+        with patch(
+            "computeruse._reporting.report_to_api", return_value=True
+        ) as mock_report:
+            config = TrackConfig(
+                output_dir=str(tmp_path / ".observius"),
+                api_url="http://localhost:3000",
+                api_key="test-key",
+                task_id="report-ok",
+            )
+            async with track(page, config=config) as t:
+                await t.click("#btn")
+
+        mock_report.assert_awaited_once()
+        call_kwargs = mock_report.call_args[1]
+        assert call_kwargs["status"] == "completed"
+        assert call_kwargs["api_url"] == "http://localhost:3000"
+        assert call_kwargs["api_key"] == "test-key"
+        assert call_kwargs["task_id"] == "report-ok"
+
+    async def test_reports_failure_status_on_failed_step(self, tmp_path):
+        async def bad_click(selector, **kw):
+            raise RuntimeError("boom")
+
+        page = MockPage()
+        page.click = bad_click
+        with patch(
+            "computeruse._reporting.report_to_api", return_value=True
+        ) as mock_report:
+            config = TrackConfig(
+                output_dir=str(tmp_path / ".observius"),
+                api_url="http://localhost:3000",
+                api_key="test-key",
+            )
+            with pytest.raises(RuntimeError):
+                async with track(page, config=config) as t:
+                    await t.click("#missing")
+
+        mock_report.assert_awaited_once()
+        call_kwargs = mock_report.call_args[1]
+        assert call_kwargs["status"] == "failed"
+
+    async def test_no_report_without_config(self, tmp_path):
+        page = MockPage()
+        with patch(
+            "computeruse._reporting.report_to_api"
+        ) as mock_report:
+            config = TrackConfig(
+                output_dir=str(tmp_path / ".observius"),
+            )
+            async with track(page, config=config) as t:
+                await t.click("#btn")
+
+        mock_report.assert_not_called()
+
+    async def test_continues_if_reporting_fails(self, tmp_path):
+        page = MockPage()
+        with patch(
+            "computeruse._reporting.report_to_api", return_value=False
+        ):
+            config = TrackConfig(
+                output_dir=str(tmp_path / ".observius"),
+                api_url="http://localhost:3000",
+                api_key="test-key",
+                task_id="report-false",
+            )
+            async with track(page, config=config) as t:
+                await t.click("#btn")
+
+        # Steps and metadata should still be saved
+        assert len(t.steps) == 1
+        assert (tmp_path / ".observius" / "runs" / "report-false.json").exists()

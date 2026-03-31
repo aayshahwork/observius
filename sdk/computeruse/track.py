@@ -38,6 +38,10 @@ class TrackConfig:
     output_dir: str = ".observius"
     task_id: Optional[str] = None
 
+    # API reporting (optional)
+    api_url: Optional[str] = None
+    api_key: Optional[str] = None
+
 
 class TrackedPage:
     """Wraps a Playwright Page with automatic step tracking.
@@ -325,3 +329,27 @@ async def track(
     finally:
         tracked._save_outputs()
         tracked._save_run_metadata()
+        if cfg.api_url and cfg.api_key:
+            try:
+                from computeruse._reporting import report_to_api
+
+                has_failure = any(
+                    not s.success for s in tracked._steps
+                )
+                await report_to_api(
+                    api_url=cfg.api_url,
+                    api_key=cfg.api_key,
+                    task_id=tracked._run_id,
+                    task_description="Playwright session",
+                    status="failed" if has_failure else "completed",
+                    steps=tracked._steps,
+                    cost_cents=0.0,
+                    error_category=None,
+                    error_message=None,
+                    duration_ms=int(
+                        (time.monotonic() - tracked._start_time) * 1000
+                    ),
+                    created_at=tracked._start_dt,
+                )
+            except Exception:
+                pass

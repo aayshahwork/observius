@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Optional
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -1678,3 +1678,88 @@ class TestLargeRuns:
             "wait",
             "extract",  # DoneAction maps to extract
         ]
+
+
+# ---------------------------------------------------------------------------
+# API reporting
+# ---------------------------------------------------------------------------
+
+
+class TestApiReporting:
+    """Tests for optional API reporting in wrap()."""
+
+    async def test_reports_on_success(self) -> None:
+        result = _make_result()
+        agent = MockAgent(result=result)
+
+        with patch(
+            "computeruse._reporting.report_to_api", return_value=True
+        ) as mock_report:
+            wrapped = wrap(
+                agent,
+                api_url="http://localhost:3000",
+                api_key="test-key",
+                output_dir="/tmp/observius_test_report_ok",
+            )
+            await wrapped.run()
+
+        mock_report.assert_awaited_once()
+        call_kwargs = mock_report.call_args[1]
+        assert call_kwargs["status"] == "completed"
+        assert call_kwargs["api_url"] == "http://localhost:3000"
+        assert call_kwargs["api_key"] == "test-key"
+        assert call_kwargs["error_category"] is None
+        assert call_kwargs["error_message"] is None
+
+    async def test_reports_on_failure(self) -> None:
+        agent = MockAgent(error=ValueError("task broke"))
+
+        with patch(
+            "computeruse._reporting.report_to_api", return_value=True
+        ) as mock_report:
+            wrapped = wrap(
+                agent,
+                api_url="http://localhost:3000",
+                api_key="test-key",
+                max_retries=0,
+                output_dir="/tmp/observius_test_report_fail",
+            )
+            with pytest.raises(ValueError, match="task broke"):
+                await wrapped.run()
+
+        mock_report.assert_awaited_once()
+        call_kwargs = mock_report.call_args[1]
+        assert call_kwargs["status"] == "failed"
+        assert call_kwargs["error_message"] == "task broke"
+
+    async def test_no_report_without_config(self) -> None:
+        result = _make_result()
+        agent = MockAgent(result=result)
+
+        with patch(
+            "computeruse._reporting.report_to_api"
+        ) as mock_report:
+            wrapped = wrap(
+                agent,
+                output_dir="/tmp/observius_test_no_report",
+            )
+            await wrapped.run()
+
+        mock_report.assert_not_called()
+
+    async def test_continues_if_reporting_fails(self) -> None:
+        result = _make_result()
+        agent = MockAgent(result=result)
+
+        with patch(
+            "computeruse._reporting.report_to_api", return_value=False
+        ):
+            wrapped = wrap(
+                agent,
+                api_url="http://localhost:3000",
+                api_key="test-key",
+                output_dir="/tmp/observius_test_report_false",
+            )
+            run_result = await wrapped.run()
+
+        assert run_result is result

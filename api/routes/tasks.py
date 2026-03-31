@@ -2,6 +2,7 @@
 api/routes/tasks.py — Task CRUD endpoints.
 
 POST   /api/v1/tasks              Create a new task
+POST   /api/v1/tasks/ingest       Ingest a completed task from the SDK
 GET    /api/v1/tasks/{task_id}    Get task by ID
 GET    /api/v1/tasks              List tasks (paginated)
 DELETE /api/v1/tasks/{task_id}    Cancel a task
@@ -11,9 +12,11 @@ GET    /api/v1/tasks/{task_id}/replay  Get signed replay URL
 
 from __future__ import annotations
 
+import base64
 import json
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 
 import structlog
 from celery import Celery
@@ -28,10 +31,10 @@ from api.middleware.auth import get_current_account
 from api.models.account import Account
 from api.models.task import Task
 from api.models.task_step import TaskStep
-from api.schemas.task import ErrorResponse, StepResponse, TaskCreateRequest, TaskListResponse, TaskResponse
+from api.schemas.task import ErrorResponse, StepResponse, TaskCreateRequest, TaskIngestRequest, TaskListResponse, TaskResponse
 from shared.constants import TIER_LIMITS
-from api.services.audit_logger import TASK_CANCELLED, TASK_CREATED, TASK_RETRIED, AuditLogger
-from api.services.r2 import presign_replay, presign_screenshot
+from api.services.audit_logger import TASK_CANCELLED, TASK_CREATED, TASK_INGESTED, TASK_RETRIED, AuditLogger
+from api.services.r2 import _get_client as _get_r2_client, presign_replay, presign_screenshot
 from shared.url_validator import SSRFBlockedError, validate_url_async, validate_webhook_url
 
 logger = structlog.get_logger("api.tasks")
@@ -58,7 +61,7 @@ def _task_to_response(task: Task) -> TaskResponse:
         success=task.success or False,
         result=result,
         error=task.error_message,
-        replay_url=None,
+        replay_url=presign_replay(task.replay_s3_key) if task.replay_s3_key else None,
         steps=task.total_steps or 0,
         duration_ms=task.duration_ms or 0,
         created_at=task.created_at or datetime.now(timezone.utc),
@@ -194,6 +197,160 @@ async def create_task(
         await redis.set(cache_key, response.model_dump_json(), ex=IDEMPOTENCY_TTL)
 
     return response
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/tasks/ingest
+# ---------------------------------------------------------------------------
+
+
+def _upload_screenshot_base64(task_id: str, step_number: int, base64_data: str) -> str | None:
+    """Decode base64 screenshot and upload to R2. Returns S3 key or None.
+
+    Falls back to local filesystem when R2 is not configured.
+    """
+    try:
+        screenshot_bytes = base64.b64decode(base64_data)
+    except Exception:
+        logger.warning("invalid_base64_screenshot", task_id=task_id, step=step_number)
+        return None
+
+    client = _get_r2_client()
+    if client is None:
+        return _save_screenshot_local(task_id, step_number, screenshot_bytes)
+
+    s3_key = f"replays/{task_id}/step_{step_number}.png"
+    try:
+        client.put_object(
+            Bucket=settings.R2_BUCKET_NAME,
+            Key=s3_key,
+            Body=screenshot_bytes,
+            ContentType="image/png",
+        )
+        return s3_key
+    except Exception:
+        logger.warning("screenshot_upload_failed", task_id=task_id, step=step_number, exc_info=True)
+        return None
+
+
+def _save_screenshot_local(task_id: str, step_number: int, screenshot_bytes: bytes) -> str:
+    """Save a screenshot to the local filesystem. Returns a local:// key."""
+    import os
+
+    task_dir = os.path.join("replays", task_id)
+    os.makedirs(task_dir, exist_ok=True)
+
+    filename = f"step_{step_number}.png"
+    filepath = os.path.join(task_dir, filename)
+    with open(filepath, "wb") as f:
+        f.write(screenshot_bytes)
+
+    return f"local://{task_dir}/{filename}"
+
+
+@router.post(
+    "/ingest",
+    status_code=status.HTTP_201_CREATED,
+    response_model=TaskResponse,
+    responses={409: {"model": ErrorResponse}, 401: {"model": ErrorResponse}},
+)
+async def ingest_task(
+    body: TaskIngestRequest,
+    request: Request,
+    account: Account = Depends(get_current_account),
+    db: AsyncSession = Depends(get_db),
+) -> TaskResponse:
+    """Accept a completed task result from the SDK."""
+
+    # -- Parse or generate task_id --
+    if body.task_id:
+        try:
+            task_id = uuid.UUID(body.task_id)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"error_code": "INVALID_INPUT", "message": "task_id must be a valid UUID."},
+            )
+    else:
+        task_id = uuid.uuid4()
+
+    # -- Duplicate check --
+    existing = await db.execute(select(Task).where(Task.id == task_id))
+    if existing.scalar_one_or_none() is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"error_code": "DUPLICATE_TASK", "message": "Task with this ID already exists."},
+        )
+
+    # -- Parse timestamps --
+    now = datetime.now(timezone.utc)
+    try:
+        created_at = datetime.fromisoformat(body.created_at) if body.created_at else now
+    except ValueError:
+        created_at = now
+    try:
+        completed_at = datetime.fromisoformat(body.completed_at) if body.completed_at else now
+    except ValueError:
+        completed_at = now
+
+    # -- Create Task row --
+    task = Task(
+        id=task_id,
+        account_id=account.id,
+        status=body.status,
+        success=(body.status == "completed"),
+        url=body.url or "",
+        task_description=body.task_description or body.url or "SDK task",
+        total_steps=len(body.steps),
+        duration_ms=body.duration_ms,
+        total_tokens_in=body.total_tokens_in,
+        total_tokens_out=body.total_tokens_out,
+        cost_cents=Decimal(str(body.cost_cents)),
+        error_message=body.error_message,
+        error_category=body.error_category,
+        executor_mode=body.executor_mode,
+        created_at=created_at,
+        completed_at=completed_at,
+    )
+    db.add(task)
+
+    # -- Create TaskStep rows --
+    for step in body.steps:
+        s3_key = None
+        if step.screenshot_base64:
+            s3_key = _upload_screenshot_base64(str(task_id), step.step_number, step.screenshot_base64)
+
+        task_step = TaskStep(
+            task_id=task_id,
+            step_number=step.step_number,
+            action_type=step.action_type,
+            description=step.description[:500] if step.description else None,
+            screenshot_s3_key=s3_key,
+            llm_tokens_in=step.tokens_in,
+            llm_tokens_out=step.tokens_out,
+            duration_ms=step.duration_ms,
+            success=step.success,
+            error_message=step.error,
+        )
+        db.add(task_step)
+
+    # -- Audit log --
+    await AuditLogger(db).log(
+        account_id=account.id,
+        actor_type="sdk",
+        actor_id=str(account.id),
+        action=TASK_INGESTED,
+        resource_type="task",
+        resource_id=str(task_id),
+        metadata={"executor_mode": body.executor_mode, "steps": len(body.steps)},
+        ip_address=request.client.host if request.client else None,
+    )
+
+    await db.commit()
+    await db.refresh(task)
+
+    logger.info("task_ingested", task_id=str(task_id), account_id=str(account.id), steps=len(body.steps))
+    return _task_to_response(task)
 
 
 # ---------------------------------------------------------------------------

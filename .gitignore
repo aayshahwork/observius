@@ -45,7 +45,7 @@ out/
 Thumbs.db
 
 # Tasks (Claude Code internal + user task tracking)
-tasks/
+/tasks/
 .tasks/
 
 # SDK runtime output

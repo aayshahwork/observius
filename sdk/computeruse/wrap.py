@@ -68,6 +68,10 @@ class WrapConfig:
     # Task identification
     task_id: Optional[str] = None
 
+    # API reporting (optional)
+    api_url: Optional[str] = None
+    api_key: Optional[str] = None
+
 
 # ---------------------------------------------------------------------------
 # Factory
@@ -225,6 +229,27 @@ class WrappedAgent:
                 self._save_outputs()
                 self._save_run_metadata(status="completed")
 
+                if self._config.api_url and self._config.api_key:
+                    from computeruse._reporting import report_to_api
+
+                    await report_to_api(
+                        api_url=self._config.api_url,
+                        api_key=self._config.api_key,
+                        task_id=self._task_id,
+                        task_description=getattr(
+                            self._agent, "task", ""
+                        ),
+                        status="completed",
+                        steps=self._steps,
+                        cost_cents=self._cost_cents,
+                        error_category=None,
+                        error_message=None,
+                        duration_ms=int(
+                            (time.monotonic() - self._start_time) * 1000
+                        ),
+                        created_at=self._created_at,
+                    )
+
                 return result
 
             except Exception as exc:
@@ -254,6 +279,26 @@ class WrappedAgent:
                     continue
 
                 self._save_run_metadata(status="failed", error=str(exc))
+                if self._config.api_url and self._config.api_key:
+                    from computeruse._reporting import report_to_api
+
+                    await report_to_api(
+                        api_url=self._config.api_url,
+                        api_key=self._config.api_key,
+                        task_id=self._task_id,
+                        task_description=getattr(
+                            self._agent, "task", ""
+                        ),
+                        status="failed",
+                        steps=self._steps,
+                        cost_cents=self._cost_cents,
+                        error_category=self._error_category,
+                        error_message=str(exc),
+                        duration_ms=int(
+                            (time.monotonic() - self._start_time) * 1000
+                        ),
+                        created_at=self._created_at,
+                    )
                 raise
 
         # All retries exhausted — should not normally reach here because the

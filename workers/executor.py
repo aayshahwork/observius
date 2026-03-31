@@ -602,9 +602,12 @@ class TaskExecutor:
 
                 step = self.steps[step_index]
 
-                # Screenshot
+                # Screenshot — browser_use returns base64 strings, not bytes
                 if i < len(screenshots) and screenshots[i]:
-                    step.screenshot_bytes = screenshots[i]
+                    screenshot = screenshots[i]
+                    if isinstance(screenshot, str):
+                        screenshot = base64.b64decode(screenshot)
+                    step.screenshot_bytes = screenshot
 
                 # Action type from action_names()
                 if i < len(action_names) and action_names[i]:

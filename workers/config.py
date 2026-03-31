@@ -20,3 +20,10 @@ class WorkerSettings(BaseSettings):
 
 
 worker_settings = WorkerSettings()
+
+
+def is_r2_configured() -> bool:
+    """Return True if R2 credentials are present and non-placeholder."""
+    key = worker_settings.R2_ACCESS_KEY
+    secret = worker_settings.R2_SECRET_KEY
+    return bool(key and secret and key != "your_r2_access_key" and secret != "your_r2_secret_key")

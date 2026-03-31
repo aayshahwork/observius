@@ -8,12 +8,53 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 
 # ---------------------------------------------------------------------------
 # Request models
 # ---------------------------------------------------------------------------
+
+class StepIngestData(BaseModel):
+    """Single step in an SDK-ingested task."""
+
+    step_number: int
+    action_type: str = "unknown"
+    description: str = ""
+    tokens_in: int = 0
+    tokens_out: int = 0
+    duration_ms: int = 0
+    success: bool = True
+    error: str | None = None
+    screenshot_base64: str | None = None
+
+
+class TaskIngestRequest(BaseModel):
+    """POST /api/v1/tasks/ingest request body — accepts pre-completed task results from the SDK."""
+
+    task_id: str | None = None
+    url: str = ""
+    task_description: str = ""
+    status: str = "completed"
+    cost_cents: float = 0.0
+    total_tokens_in: int = 0
+    total_tokens_out: int = 0
+    error_category: str | None = None
+    error_message: str | None = None
+    executor_mode: str = "sdk"
+    duration_ms: int = 0
+    steps: list[StepIngestData] = []
+    created_at: str | None = None
+    completed_at: str | None = None
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v: str) -> str:
+        allowed = {"queued", "running", "completed", "failed", "timeout", "cancelled"}
+        if v not in allowed:
+            raise ValueError(f"status must be one of {allowed}")
+        return v
+
 
 class TaskCreateRequest(BaseModel):
     """POST /api/v1/tasks request body."""

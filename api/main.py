@@ -96,6 +96,11 @@ app.include_router(billing_router)
 app.include_router(account_router)
 app.include_router(audit_router)
 
+# Local file serving for dev (replays/screenshots when R2 is not configured)
+if settings.ENVIRONMENT == "development":
+    from api.routes.local_files import router as local_files_router
+    app.include_router(local_files_router)
+
 # ---------------------------------------------------------------------------
 # Global exception handler
 # ---------------------------------------------------------------------------

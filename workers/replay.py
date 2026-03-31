@@ -65,7 +65,11 @@ class ReplayGenerator:
         """Serialize a StepData to the replay JSON format."""
         screenshot_b64: str | None = None
         if step.screenshot_bytes:
-            screenshot_b64 = base64.standard_b64encode(step.screenshot_bytes).decode("ascii")
+            data = step.screenshot_bytes
+            if isinstance(data, str):
+                screenshot_b64 = data  # already base64-encoded
+            else:
+                screenshot_b64 = base64.standard_b64encode(data).decode("ascii")
 
         return {
             "step_number": step.step_number,

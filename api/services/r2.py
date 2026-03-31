@@ -90,10 +90,38 @@ def generate_presigned_url(s3_key: str, expires_in: int = 3600) -> str | None:
 
 
 def presign_screenshot(s3_key: str) -> str | None:
-    """Pre-sign a step screenshot URL (1-hour expiry)."""
+    """Pre-sign a step screenshot URL (1-hour expiry).
+
+    Handles local:// keys by returning a local file-serving URL.
+    """
+    if s3_key.startswith("local://"):
+        return _local_file_url(s3_key)
     return generate_presigned_url(s3_key, expires_in=SCREENSHOT_EXPIRY)
 
 
 def presign_replay(s3_key: str) -> str | None:
-    """Pre-sign a replay recording URL (7-day expiry)."""
+    """Pre-sign a replay recording URL (7-day expiry).
+
+    Handles local:// keys by returning a local file-serving URL.
+    """
+    if s3_key.startswith("local://"):
+        return _local_file_url(s3_key)
     return generate_presigned_url(s3_key, expires_in=REPLAY_EXPIRY)
+
+
+def _local_file_url(local_key: str) -> str:
+    """Convert a local:// key to an API file-serving URL."""
+    import urllib.parse
+
+    # local://replays/{task_id}/replay.html -> replays/{task_id}/replay.html
+    path = local_key.removeprefix("local://")
+    return f"/api/v1/local-files/{urllib.parse.quote(path, safe='/')}"
+
+
+def is_r2_configured() -> bool:
+    """Return True if R2 credentials are present and non-placeholder."""
+    from api.config import settings
+
+    key = settings.R2_ACCESS_KEY
+    secret = settings.R2_SECRET_KEY
+    return bool(key and secret and key != "your_r2_access_key" and secret != "your_r2_secret_key")
