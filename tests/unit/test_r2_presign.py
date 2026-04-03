@@ -51,6 +51,7 @@ class TestPresignedURLGeneration:
     """Verify pre-signed URL generation with a mocked boto3 client."""
 
     def test_presign_screenshot_returns_url(self, mock_s3_client):
+        from api.config import settings
         from api.services.r2 import SCREENSHOT_EXPIRY, presign_screenshot
 
         url = presign_screenshot("replays/abc/step_1.png")
@@ -58,11 +59,12 @@ class TestPresignedURLGeneration:
         assert url == "https://r2.example.com/bucket/key?X-Amz-Signature=abc"
         mock_s3_client.generate_presigned_url.assert_called_once_with(
             "get_object",
-            Params={"Bucket": "computeruse-recordings", "Key": "replays/abc/step_1.png"},
+            Params={"Bucket": settings.R2_BUCKET_NAME, "Key": "replays/abc/step_1.png"},
             ExpiresIn=SCREENSHOT_EXPIRY,
         )
 
     def test_presign_replay_uses_7_day_expiry(self, mock_s3_client):
+        from api.config import settings
         from api.services.r2 import REPLAY_EXPIRY, presign_replay
 
         url = presign_replay("replays/abc/replay.html")
@@ -70,7 +72,7 @@ class TestPresignedURLGeneration:
         assert url == "https://r2.example.com/bucket/key?X-Amz-Signature=abc"
         mock_s3_client.generate_presigned_url.assert_called_once_with(
             "get_object",
-            Params={"Bucket": "computeruse-recordings", "Key": "replays/abc/replay.html"},
+            Params={"Bucket": settings.R2_BUCKET_NAME, "Key": "replays/abc/replay.html"},
             ExpiresIn=REPLAY_EXPIRY,
         )
 

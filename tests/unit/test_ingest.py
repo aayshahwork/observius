@@ -71,6 +71,7 @@ def _make_task(account_id: uuid.UUID, **overrides):
         total_tokens_in=0,
         total_tokens_out=0,
         executor_mode="sdk",
+        analysis_json=None,
     )
     defaults.update(overrides)
     task = MagicMock()
@@ -253,6 +254,7 @@ class TestIngestTask:
         step.success = True
         step.error_message = None
         step.created_at = datetime.now(timezone.utc)
+        step.context = None
 
         # First call: task ownership check, second call: steps query
         mock_task_result = MagicMock()
@@ -802,6 +804,7 @@ class TestIngestE2EFlows:
         step_0.success = True
         step_0.error_message = None
         step_0.created_at = datetime.now(timezone.utc)
+        step_0.context = None
 
         step_1 = MagicMock()
         step_1.step_number = 1
@@ -814,6 +817,7 @@ class TestIngestE2EFlows:
         step_1.success = True
         step_1.error_message = None
         step_1.created_at = datetime.now(timezone.utc)
+        step_1.context = None
 
         mock_task_result = MagicMock()
         mock_task_result.scalar_one_or_none.return_value = task_mock

@@ -49,6 +49,9 @@ _bu_browser_browser = _stub(
     BrowserConfig=MagicMock,
 )
 _stub("browser_use.llm", ChatAnthropic=MagicMock)
+_stub("browser_use.llm.anthropic")
+_stub("browser_use.llm.anthropic.chat", ChatAnthropic=MagicMock)
+_stub("browser_use.browser.session", BrowserSession=MagicMock)
 
 # langchain_anthropic ────────────────────────────────────────────────────────
 _lca = _stub("langchain_anthropic")

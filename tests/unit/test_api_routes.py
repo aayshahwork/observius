@@ -78,6 +78,7 @@ def _make_task(account_id: uuid.UUID, **overrides):
         total_tokens_in=0,
         total_tokens_out=0,
         executor_mode="browser_use",
+        analysis_json=None,
     )
     defaults.update(overrides)
     task = MagicMock()

@@ -164,7 +164,7 @@ class TestTaskConfigValidation:
 
 
 class TestLocalMode:
-    @patch("computeruse.client.TaskExecutor")
+    @patch("computeruse.executor.TaskExecutor")
     def test_run_task_returns_result(self, mock_executor_cls):
         """Mock executor, verify run_task() returns correct TaskResult."""
         expected = _make_result()
@@ -184,7 +184,7 @@ class TestLocalMode:
         assert result.result == {"title": "Hello"}
         mock_instance.execute.assert_called_once()
 
-    @patch("computeruse.client.TaskExecutor")
+    @patch("computeruse.executor.TaskExecutor")
     def test_run_task_async_works(self, mock_executor_cls):
         """Verify run_task_async returns correctly."""
         expected = _make_result()
@@ -200,7 +200,7 @@ class TestLocalMode:
         assert result.task_id == expected.task_id
         assert result.success is True
 
-    @patch("computeruse.client.TaskExecutor")
+    @patch("computeruse.executor.TaskExecutor")
     def test_each_call_gets_own_executor(self, mock_executor_cls):
         """Verify concurrent run_task calls each create their own executor."""
         expected = _make_result()
