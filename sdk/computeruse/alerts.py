@@ -15,7 +15,7 @@ Usage::
             on_stuck=lambda tid, reason: print(f"STUCK: {tid} {reason}"),
             on_cost_exceeded=lambda tid, cost: print(f"COST: {tid} ${cost/100:.2f}"),
             cost_threshold_cents=50.0,
-            webhook_url="https://hooks.example.com/observius",
+            webhook_url="https://hooks.example.com/pokant",
         ),
     )
 """
@@ -29,7 +29,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Optional
 
-logger = logging.getLogger("observius")
+logger = logging.getLogger("pokant")
 
 
 @dataclass(frozen=True)

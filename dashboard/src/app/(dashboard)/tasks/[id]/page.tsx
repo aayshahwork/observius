@@ -19,6 +19,7 @@ import { JsonViewer } from "@/components/json-viewer";
 import { ReplayViewer } from "@/components/replay-viewer";
 import { AnalysisPanel } from "@/components/analysis-panel";
 import { StepTimeline } from "@/components/step-timeline";
+import { WorkflowPanel } from "@/components/workflow-panel";
 import { RetryChain } from "@/components/retry-chain";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -324,7 +325,7 @@ export default function TaskDetailPage() {
       {/* Result */}
       {task.result && <JsonViewer data={task.result} title="Result" />}
 
-      {/* Steps + Replay tabs */}
+      {/* Steps + Replay + Workflow tabs */}
       {(task.steps > 0 || isTerminal(task.status)) && (
         <Tabs defaultValue={task.steps > 0 ? "steps" : "replay"}>
           <TabsList>
@@ -334,6 +335,9 @@ export default function TaskDetailPage() {
               </TabsTrigger>
             )}
             <TabsTrigger value="replay">Replay</TabsTrigger>
+            {task.compiled_workflow && (
+              <TabsTrigger value="workflow">Workflow</TabsTrigger>
+            )}
           </TabsList>
           {task.steps > 0 && (
             <TabsContent value="steps">
@@ -349,6 +353,11 @@ export default function TaskDetailPage() {
           <TabsContent value="replay">
             <ReplayViewer replayUrl={replayUrl} loading={replayLoading} />
           </TabsContent>
+          {task.compiled_workflow && (
+            <TabsContent value="workflow">
+              <WorkflowPanel workflow={task.compiled_workflow} taskId={task.task_id} client={client} />
+            </TabsContent>
+          )}
         </Tabs>
       )}
 

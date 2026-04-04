@@ -1,7 +1,7 @@
 [project]
-name = "observius-monorepo"
+name = "pokant-monorepo"
 version = "0.1.0"
-description = "Observius monorepo - one API to automate any browser workflow"
+description = "Pokant monorepo - one API to automate any browser workflow"
 requires-python = ">=3.11"
 
 [tool.pytest.ini_options]

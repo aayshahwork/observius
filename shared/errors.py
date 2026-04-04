@@ -2,7 +2,7 @@ from shared.constants import ErrorCode
 
 
 class ComputerUseError(Exception):
-    """Base exception for ComputerUse.dev."""
+    """Base exception for Pokant."""
 
     def __init__(self, message: str, error_type: ErrorCode) -> None:
         super().__init__(message)

@@ -1,6 +1,6 @@
-from computeruse import ObserviusTracker
+from computeruse import PokantTracker
 
-tracker = ObserviusTracker(
+tracker = PokantTracker(
     task_description="Full context system test",
     api_url="http://localhost:8000",
     api_key="cu_test_testkey1234567890abcdef12",

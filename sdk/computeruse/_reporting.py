@@ -1,4 +1,4 @@
-"""Best-effort reporting of run results to the Observius API."""
+"""Best-effort reporting of run results to the Pokant API."""
 
 from __future__ import annotations
 
@@ -7,10 +7,52 @@ import json
 import logging
 import urllib.error
 import urllib.request
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-logger = logging.getLogger("observius")
+logger = logging.getLogger("pokant")
+
+
+def _ensure_uuid(task_id: str) -> str:
+    """Return *task_id* unchanged if it's already a valid UUID, otherwise
+    generate a fresh UUID (keeping the original in ``task_description``)."""
+    try:
+        uuid.UUID(task_id)
+        return task_id
+    except (ValueError, AttributeError):
+        return str(uuid.uuid4())
+
+
+def _try_compile_workflow(
+    task_id: str,
+    steps: list[Any],
+    url: str,
+    status: str,
+) -> dict | None:
+    """Best-effort compilation of steps into a replayable workflow.
+
+    Returns the compiled workflow as a dict, or None on any failure.
+    Never raises.
+    """
+    if not steps:
+        return None
+    try:
+        from dataclasses import asdict
+
+        from .compiler import WorkflowCompiler
+
+        compiler = WorkflowCompiler()
+        workflow = compiler.compile_from_steps(
+            steps=steps,
+            start_url=url,
+            source_task_id=task_id,
+            name=task_id,
+        )
+        return asdict(workflow)
+    except Exception:
+        logger.debug("Workflow compilation skipped for %s", task_id, exc_info=True)
+        return None
 
 
 def _report_to_api_sync(
@@ -28,15 +70,21 @@ def _report_to_api_sync(
     analysis: dict | None = None,
     url: str = "",
     result: dict | None = None,
+    attempts: list[dict] | None = None,
 ) -> bool:
-    """Synchronous POST of run results to the Observius API ingest endpoint.
+    """Synchronous POST of run results to the Pokant API ingest endpoint.
 
     Returns True if successful, False otherwise.
     Never raises -- all errors are caught and logged.
     """
     try:
+        api_task_id = _ensure_uuid(task_id)
+        # If the caller used a human-readable name, include it in the description
+        if api_task_id != task_id:
+            task_description = f"[{task_id}] {task_description}".strip()
+
         payload = {
-            "task_id": task_id,
+            "task_id": api_task_id,
             "url": url,
             "task_description": task_description,
             "status": status,
@@ -59,7 +107,7 @@ def _report_to_api_sync(
                     "success": getattr(s, "success", True),
                     "error": getattr(s, "error", None),
                     "screenshot_base64": _encode_screenshot(s),
-                    "context": _serialize_context(s),
+                    "context": _build_step_context(s),
                 }
                 for i, s in enumerate(steps)
             ],
@@ -69,8 +117,20 @@ def _report_to_api_sync(
                 else datetime.now(timezone.utc).isoformat()
             ),
             "completed_at": datetime.now(timezone.utc).isoformat(),
-            "analysis": analysis,
+            "analysis": serialize_analysis(analysis),
         }
+
+        # Merge adaptive retry attempt history into the analysis dict
+        if attempts:
+            if payload["analysis"] is None:
+                payload["analysis"] = {}
+            payload["analysis"]["attempts"] = attempts
+            payload["analysis"]["total_attempts"] = len(attempts)
+            payload["analysis"]["adaptive_retry_used"] = True
+
+        compiled = _try_compile_workflow(task_id, steps, url, status)
+        if compiled is not None:
+            payload["compiled_workflow"] = compiled
 
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
@@ -107,6 +167,7 @@ async def report_to_api(
     analysis: dict | None = None,
     url: str = "",
     result: dict | None = None,
+    attempts: list[dict] | None = None,
 ) -> bool:
     """Async wrapper around :func:`_report_to_api_sync`.
 
@@ -128,12 +189,38 @@ async def report_to_api(
         analysis=analysis,
         url=url,
         result=result,
+        attempts=attempts,
     )
 
 
-def _serialize_context(step: Any) -> dict | None:
-    """Extract and JSON-safe-serialize step context if present."""
-    ctx = getattr(step, "context", None)
+def serialize_analysis(analysis: Any) -> dict | None:
+    """Convert a RunAnalysis dataclass (or dict) to a JSON-safe dict."""
+    if analysis is None:
+        return None
+    if isinstance(analysis, dict):
+        return analysis
+    try:
+        from dataclasses import asdict
+        return asdict(analysis)
+    except Exception:
+        return None
+
+
+_ENRICHMENT_FIELDS = (
+    "selectors", "intent", "intent_detail", "pre_url", "post_url",
+    "expected_url_pattern", "expected_element", "expected_text",
+    "fill_value_template", "element_text", "element_tag", "element_role",
+    "verification_result",
+)
+
+
+def _build_step_context(step: Any) -> dict | None:
+    """Merge explicit context with enrichment fields into a single dict."""
+    ctx = dict(getattr(step, "context", None) or {})
+    for key in _ENRICHMENT_FIELDS:
+        val = getattr(step, key, None)
+        if val is not None and val != "" and val != []:
+            ctx[key] = val
     if not ctx:
         return None
     try:

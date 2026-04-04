@@ -1,8 +1,8 @@
-// Example: Report a completed browser agent run to Observius.
+// Example: Report a completed browser agent run to Pokant.
 // Uses only the Go standard library — copy-paste into your project.
 //
 // Usage:
-//   OBSERVIUS_API_KEY=cu_test_testkey1234567890abcdef12 go run reporter.go
+//   POKANT_API_KEY=cu_test_testkey1234567890abcdef12 go run reporter.go
 package main
 
 import (
@@ -35,11 +35,11 @@ type ingestPayload struct {
 }
 
 func main() {
-	apiURL := os.Getenv("OBSERVIUS_API_URL")
+	apiURL := os.Getenv("POKANT_API_URL")
 	if apiURL == "" {
 		apiURL = "http://localhost:8000"
 	}
-	apiKey := os.Getenv("OBSERVIUS_API_KEY")
+	apiKey := os.Getenv("POKANT_API_KEY")
 	if apiKey == "" {
 		apiKey = "cu_test_testkey1234567890abcdef12"
 	}

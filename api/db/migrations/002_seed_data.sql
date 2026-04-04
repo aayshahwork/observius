@@ -6,7 +6,7 @@ BEGIN;
 INSERT INTO accounts (id, email, name, tier, monthly_step_limit, encryption_key_id)
 VALUES (
     uuid_generate_v7(),
-    'test@computeruse.dev',
+    'test@pokant.dev',
     'Test Account',
     'free',
     500,
@@ -18,7 +18,7 @@ VALUES (
 INSERT INTO api_keys (id, account_id, key_hash, key_prefix, key_suffix, label)
 VALUES (
     uuid_generate_v7(),
-    (SELECT id FROM accounts WHERE email = 'test@computeruse.dev'),
+    (SELECT id FROM accounts WHERE email = 'test@pokant.dev'),
     encode(sha256('cu_test_testkey1234567890abcdef12'::bytea), 'hex'),
     'cu_test_',
     'f12',

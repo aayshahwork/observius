@@ -2,9 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, HeartPulse, ListTodo, Key, BarChart3, Settings, LogOut, Sun, Moon, Monitor } from "lucide-react";
+import { LayoutDashboard, HeartPulse, ListTodo, FileCode2, Key, BarChart3, Settings, Sun, Moon, Monitor } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
-import { useAuth } from "@/contexts/auth-context";
 import { useTheme } from "@/contexts/theme-context";
 import { cn } from "@/lib/utils";
 
@@ -12,6 +11,7 @@ const navItems = [
   { href: "/overview", label: "Overview", icon: LayoutDashboard },
   { href: "/health", label: "Health", icon: HeartPulse },
   { href: "/tasks", label: "Tasks", icon: ListTodo },
+  { href: "/scripts", label: "Scripts", icon: FileCode2 },
   { href: "/sessions", label: "Sessions", icon: Key },
   { href: "/usage", label: "Usage", icon: BarChart3 },
   { href: "/settings", label: "Settings", icon: Settings },
@@ -19,7 +19,6 @@ const navItems = [
 
 export function Sidebar({ className }: { className?: string }) {
   const pathname = usePathname();
-  const { logout } = useAuth();
   const { theme, setTheme } = useTheme();
 
   const cycleTheme = () => {
@@ -38,7 +37,7 @@ export function Sidebar({ className }: { className?: string }) {
     >
       <div className="flex h-14 items-center px-4">
         <Link href="/overview" className="text-base font-semibold tracking-tight">
-          ComputerUse.dev
+          Pokant
         </Link>
       </div>
 
@@ -73,13 +72,6 @@ export function Sidebar({ className }: { className?: string }) {
         >
           <ThemeIcon className="size-4" />
           {theme === "light" ? "Light" : theme === "dark" ? "Dark" : "System"}
-        </button>
-        <button
-          onClick={logout}
-          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-        >
-          <LogOut className="size-4" />
-          Log out
         </button>
       </div>
     </aside>

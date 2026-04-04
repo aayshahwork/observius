@@ -1,4 +1,4 @@
-"""Tests for ObserviusTracker — generic agent tracking."""
+"""Tests for PokantTracker — generic agent tracking."""
 
 import asyncio
 import base64
@@ -15,13 +15,13 @@ import pytest
 
 from computeruse.cost import calculate_cost_cents
 from computeruse.models import StepData
-from computeruse.tracker import ObserviusTracker, TrackerConfig, create_tracker
+from computeruse.tracker import PokantTracker, TrackerConfig, create_tracker
 
 
-class TestObserviusTracker:
+class TestPokantTracker:
 
     def test_basic_tracking(self, tmp_path: Path) -> None:
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
         ))
@@ -41,7 +41,7 @@ class TestObserviusTracker:
             assert step.step_number == i + 1
 
     def test_screenshot_formats(self, tmp_path: Path) -> None:
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
         ))
@@ -60,7 +60,7 @@ class TestObserviusTracker:
         assert steps[2].screenshot_bytes is None
 
     def test_stuck_detection(self, tmp_path: Path) -> None:
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=True,
             stuck_screenshot_threshold=3,
@@ -75,7 +75,7 @@ class TestObserviusTracker:
         assert tracker.stuck_reason == "visual_stagnation"
 
     def test_cost_accumulation(self, tmp_path: Path) -> None:
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
         ))
@@ -89,7 +89,7 @@ class TestObserviusTracker:
         assert tracker.cost_cents > 0
 
     def test_complete_saves_files(self, tmp_path: Path) -> None:
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             save_screenshots=True,
             generate_replay=True,
@@ -130,7 +130,7 @@ class TestObserviusTracker:
         assert Path(tracker.replay_path).exists()
 
     def test_fail_classifies_error(self, tmp_path: Path) -> None:
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
         ))
@@ -145,7 +145,7 @@ class TestObserviusTracker:
         assert metadata["error_category"] == "transient_network"
 
     def test_fail_with_explicit_category(self, tmp_path: Path) -> None:
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
         ))
@@ -159,7 +159,7 @@ class TestObserviusTracker:
         assert metadata["error_category"] == "permanent_llm"
 
     def test_api_reporting(self, tmp_path: Path) -> None:
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             api_url="http://localhost:8000",
             api_key="cu_test_key",
@@ -185,7 +185,7 @@ class TestObserviusTracker:
             assert kwargs["cost_cents"] == tracker.cost_cents
 
     def test_no_reporting_without_config(self, tmp_path: Path) -> None:
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
         ))
@@ -199,7 +199,7 @@ class TestObserviusTracker:
             mock_report.assert_not_called()
 
     def test_duration_auto_calculated(self, tmp_path: Path) -> None:
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
         ))
@@ -220,7 +220,7 @@ class TestObserviusTracker:
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
         )
-        assert isinstance(tracker, ObserviusTracker)
+        assert isinstance(tracker, PokantTracker)
         assert tracker.task_id  # non-empty UUID string
 
 
@@ -233,7 +233,7 @@ class TestTrackerAutoScreenshot:
             return b"async-screenshot"
 
         page = SimpleNamespace(screenshot=fake_screenshot)
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             enable_stuck_detection=False,
             page=page,
         ))
@@ -245,7 +245,7 @@ class TestTrackerAutoScreenshot:
             return b"selenium-screenshot"
 
         page = SimpleNamespace(get_screenshot_as_png=fake_get_screenshot_as_png)
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             enable_stuck_detection=False,
             page=page,
         ))
@@ -257,7 +257,7 @@ class TestTrackerAutoScreenshot:
             return b"generic-screenshot"
 
         page = SimpleNamespace(screenshot=fake_screenshot)
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             enable_stuck_detection=False,
             page=page,
         ))
@@ -265,7 +265,7 @@ class TestTrackerAutoScreenshot:
 
     def test_page_none_no_screenshot(self, tmp_path: Path) -> None:
         """page=None results in no screenshot function and no crash."""
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
         ))
@@ -276,8 +276,8 @@ class TestTrackerAutoScreenshot:
     def test_page_no_method_warns(self, caplog: pytest.LogCaptureFixture) -> None:
         """Page object with no screenshot method logs a warning."""
         page = SimpleNamespace(title="fake page")
-        with caplog.at_level(logging.WARNING, logger="observius"):
-            tracker = ObserviusTracker(TrackerConfig(
+        with caplog.at_level(logging.WARNING, logger="pokant"):
+            tracker = PokantTracker(TrackerConfig(
                 enable_stuck_detection=False,
                 page=page,
             ))
@@ -292,7 +292,7 @@ class TestTrackerAutoScreenshot:
             return fake_bytes
 
         page = SimpleNamespace(screenshot=fake_screenshot)
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
             page=page,
@@ -309,7 +309,7 @@ class TestTrackerAutoScreenshot:
             return fake_bytes
 
         page = SimpleNamespace(screenshot=fake_screenshot)
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
             page=page,
@@ -330,7 +330,7 @@ class TestTrackerAutoScreenshot:
             return b"should-not-be-used"
 
         page = SimpleNamespace(screenshot=fake_screenshot)
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
             page=page,
@@ -349,7 +349,7 @@ class TestTrackerAutoScreenshot:
             raise RuntimeError("browser crashed")
 
         page = SimpleNamespace(screenshot=bad_screenshot)
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
             page=page,
@@ -361,7 +361,7 @@ class TestTrackerAutoScreenshot:
 
     def test_backward_compat_no_page(self, tmp_path: Path) -> None:
         """Tracker without page works identically to pre-change behavior."""
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
         ))
@@ -393,7 +393,7 @@ class TestScreenshotFn:
         """screenshot_fn takes priority over page auto-detect."""
         page = SimpleNamespace(screenshot=lambda: b"page-screenshot")
         fn_bytes = b"fn-screenshot"
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             page=page,
             screenshot_fn=lambda: fn_bytes,
@@ -406,7 +406,7 @@ class TestScreenshotFn:
     def test_screenshot_fn_sync(self, tmp_path: Path) -> None:
         """Sync screenshot_fn returns bytes used as screenshot."""
         expected = b"custom-screenshot"
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             screenshot_fn=lambda: expected,
             enable_stuck_detection=False,
@@ -422,7 +422,7 @@ class TestScreenshotFn:
         async def async_fn() -> bytes:
             return expected
 
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             screenshot_fn=async_fn,
             enable_stuck_detection=False,
@@ -436,7 +436,7 @@ class TestScreenshotFn:
         def failing_fn() -> bytes:
             raise RuntimeError("screenshot failed")
 
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             screenshot_fn=failing_fn,
             enable_stuck_detection=False,
@@ -452,7 +452,7 @@ class TestStepContext:
 
     def test_record_step_with_context(self, tmp_path: Path) -> None:
         ctx = {"key": "value", "nested": {"a": 1}}
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
         ))
@@ -466,7 +466,7 @@ class TestStepContext:
 
     def test_context_in_run_metadata(self, tmp_path: Path) -> None:
         ctx = {"prompt": "hello", "response": "world"}
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
         ))
@@ -479,7 +479,7 @@ class TestStepContext:
         assert metadata["steps"][0]["context"] == ctx
 
     def test_record_llm_step(self, tmp_path: Path) -> None:
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
         ))
@@ -500,7 +500,7 @@ class TestStepContext:
         assert step.tokens_out == 50
 
     def test_record_api_step(self, tmp_path: Path) -> None:
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
         ))
@@ -520,7 +520,7 @@ class TestStepContext:
         assert "GET https://api.example.com/data" in step.description
 
     def test_record_state_snapshot(self, tmp_path: Path) -> None:
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
         ))
@@ -560,7 +560,7 @@ class TestStepContext:
         assert isinstance(result, str)
 
     def test_replay_includes_context(self, tmp_path: Path) -> None:
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
         ))
@@ -582,7 +582,7 @@ class TestStepContext:
         """Non-JSON-serializable context doesn't crash save/replay."""
         from datetime import datetime as dt
 
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
         ))
@@ -604,7 +604,7 @@ class TestDesktopTracking:
 
     def test_record_desktop_step(self, tmp_path: Path) -> None:
         """record_desktop_step creates step with desktop context."""
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
         ))
@@ -623,7 +623,7 @@ class TestDesktopTracking:
 
     def test_record_desktop_step_with_coordinates(self, tmp_path: Path) -> None:
         """Coordinates are stored in context when provided."""
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
         ))
@@ -656,7 +656,7 @@ class TestContextManager:
 
     def test_context_manager_success(self, tmp_path: Path) -> None:
         """Normal exit auto-calls complete()."""
-        with ObserviusTracker(TrackerConfig(
+        with PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
             generate_replay=False,
@@ -672,7 +672,7 @@ class TestContextManager:
     def test_context_manager_exception(self, tmp_path: Path) -> None:
         """Exception inside with-block saves as failure."""
         with pytest.raises(ValueError, match="boom"):
-            with ObserviusTracker(TrackerConfig(
+            with PokantTracker(TrackerConfig(
                 output_dir=str(tmp_path),
                 enable_stuck_detection=False,
                 generate_replay=False,
@@ -689,7 +689,7 @@ class TestContextManager:
     def test_context_manager_keyboard_interrupt(self, tmp_path: Path) -> None:
         """KeyboardInterrupt inside with-block saves as failure."""
         with pytest.raises(KeyboardInterrupt):
-            with ObserviusTracker(TrackerConfig(
+            with PokantTracker(TrackerConfig(
                 output_dir=str(tmp_path),
                 enable_stuck_detection=False,
                 generate_replay=False,
@@ -705,7 +705,7 @@ class TestContextManager:
 
     def test_context_manager_already_completed(self, tmp_path: Path) -> None:
         """No double-save if complete() called manually inside with-block."""
-        with ObserviusTracker(TrackerConfig(
+        with PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
             generate_replay=False,
@@ -721,7 +721,7 @@ class TestContextManager:
 
     async def test_async_context_manager(self, tmp_path: Path) -> None:
         """Async with-block auto-completes on normal exit."""
-        async with ObserviusTracker(TrackerConfig(
+        async with PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
             generate_replay=False,
@@ -736,7 +736,7 @@ class TestContextManager:
     async def test_async_context_manager_exception(self, tmp_path: Path) -> None:
         """Async with-block saves failure on exception."""
         with pytest.raises(RuntimeError, match="async boom"):
-            async with ObserviusTracker(TrackerConfig(
+            async with PokantTracker(TrackerConfig(
                 output_dir=str(tmp_path),
                 enable_stuck_detection=False,
                 generate_replay=False,
@@ -762,7 +762,7 @@ class TestDel:
             generate_replay=False,
             save_screenshots=False,
         )
-        tracker = ObserviusTracker(config=config)
+        tracker = PokantTracker(config=config)
         tracker.start()
         tracker.record_step(action_type="click", description="orphaned step")
         task_id = tracker.task_id
@@ -784,7 +784,7 @@ class TestDel:
             generate_replay=False,
             save_screenshots=False,
         )
-        tracker = ObserviusTracker(config=config)
+        tracker = PokantTracker(config=config)
         tracker.start()
         tracker.record_step(action_type="click", description="step")
         tracker.complete()
@@ -810,7 +810,7 @@ class TestSignalHandler:
         """Original SIGINT handler is restored after complete()."""
         original = signal.getsignal(signal.SIGINT)
 
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
             generate_replay=False,
@@ -831,7 +831,7 @@ class TestSignalHandler:
         """Original SIGINT handler is restored after fail()."""
         original = signal.getsignal(signal.SIGINT)
 
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
             generate_replay=False,
@@ -847,7 +847,7 @@ class TestSignalHandler:
         """Context manager restores original handler on exit."""
         original = signal.getsignal(signal.SIGINT)
 
-        with ObserviusTracker(TrackerConfig(
+        with PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             enable_stuck_detection=False,
             generate_replay=False,

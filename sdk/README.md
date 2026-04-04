@@ -1,4 +1,4 @@
-# Observius
+# Pokant
 
 Reliability and observability for browser automation agents.
 
@@ -23,7 +23,7 @@ Works with [browser-use](https://github.com/browser-use/browser-use) agents, [St
 ## Install
 
 ```bash
-pip install observius
+pip install pokant
 ```
 
 ## Quick Start: browser-use
@@ -107,7 +107,7 @@ async def main():
 asyncio.run(main())
 ```
 
-Install Stagehand separately: `pip install observius stagehand` (or `pip install observius[stagehand]`).
+Install Stagehand separately: `pip install pokant stagehand` (or `pip install pokant[stagehand]`).
 
 ## Quick Start: Explore-to-Replay
 
@@ -131,7 +131,7 @@ from computeruse import WorkflowCompiler, ReplayExecutor, ReplayConfig
 
 # Compile
 compiler = WorkflowCompiler()
-workflow = compiler.compile_from_run(".observius/runs/abc123.json")
+workflow = compiler.compile_from_run(".pokant/runs/abc123.json")
 compiler.save_workflow(workflow)
 
 # Replay
@@ -149,7 +149,7 @@ The replay executor uses a 4-tier fallback cascade:
 ## View Results
 
 ```bash
-pip install observius[dashboard]
+pip install pokant[dashboard]
 computeruse dashboard
 ```
 
@@ -158,7 +158,7 @@ Or from the CLI:
 ```bash
 computeruse info          # summary of runs, costs, screenshots
 computeruse clean         # delete runs older than 7 days
-computeruse open .observius/replays/abc123.html
+computeruse open .pokant/replays/abc123.html
 ```
 
 ## Features
@@ -194,7 +194,7 @@ config = WrapConfig(
     track_cost=True,                 # calculate cost from tokens
     session_key="github.com",        # persist cookies across runs
     save_screenshots=True,           # save step screenshots to disk
-    output_dir=".observius",         # where to write all output
+    output_dir=".pokant",         # where to write all output
     generate_replay=True,            # create HTML replay file
     task_id=None,                    # custom task ID (auto-generated if None)
 )
@@ -213,7 +213,7 @@ config = TrackConfig(
     retry_navigations=True,          # retry failed page.goto() calls
     max_navigation_retries=3,        # max retries per navigation
     session_key=None,                # persist cookies across runs
-    output_dir=".observius",         # where to write all output
+    output_dir=".pokant",         # where to write all output
     task_id=None,                    # custom run ID (auto-generated if None)
 )
 
@@ -260,7 +260,7 @@ The `wrap()` function integrates BudgetMonitor automatically — set `max_cost_c
 ## Architecture
 
 ```
-Your Agent --> wrap() / track() / observe_stagehand() --> Observius Layer ----> .observius/
+Your Agent --> wrap() / track() / observe_stagehand() --> Pokant Layer ----> .pokant/
                                     |                     |-- runs/*.json
                                     |-- Error Classifier  |-- screenshots/
                                     |-- Auto-Retry        |-- replays/*.html
@@ -278,14 +278,14 @@ Your Agent --> wrap() / track() / observe_stagehand() --> Observius Layer ----> 
 
 ## Any Language, Any Agent
 
-Observius works with agents written in any language via the REST ingest API.
+Pokant works with agents written in any language via the REST ingest API.
 
 ### Python
 
 ```python
-from computeruse import ObserviusTracker
+from computeruse import PokantTracker
 
-tracker = ObserviusTracker(
+tracker = PokantTracker(
     task_description="Extract pricing",
     api_url="http://localhost:8000",
     api_key="...",
@@ -299,9 +299,9 @@ tracker.complete(result={"price": 99})
 ### TypeScript / JavaScript
 
 ```typescript
-import { ObserviusReporter } from "./observius-reporter";
+import { PokantReporter } from "./pokant-reporter";
 
-const reporter = new ObserviusReporter({ apiUrl: "http://localhost:8000", apiKey: "..." });
+const reporter = new PokantReporter({ apiUrl: "http://localhost:8000", apiKey: "..." });
 reporter.start("My task");
 reporter.recordStep({ actionType: "navigate", description: "Opened portal" });
 reporter.recordStep({ actionType: "extract", description: "Got prices", tokensIn: 1500 });
@@ -323,10 +323,10 @@ See [Universal Integration Guide](docs/universal-integration.md) for the complet
 Track desktop application automation alongside browser agents:
 
 ```python
-from computeruse import ObserviusTracker
+from computeruse import PokantTracker
 from computeruse.desktop import pyautogui_screenshot_fn
 
-tracker = ObserviusTracker(
+tracker = PokantTracker(
     screenshot_fn=pyautogui_screenshot_fn(),  # captures full screen
     task_description="Process invoices in SAP",
 )

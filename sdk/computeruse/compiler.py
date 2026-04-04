@@ -165,7 +165,7 @@ class WorkflowCompiler:
     def save_workflow(
         self,
         workflow: CompiledWorkflow,
-        output_dir: str = ".observius/workflows",
+        output_dir: str = ".pokant/workflows",
     ) -> str:
         """Save workflow as JSON. Returns file path."""
         out = Path(output_dir)
@@ -293,7 +293,7 @@ class WorkflowCompiler:
         timeout = _WAIT_AFTER_MS.get(action_type, 200)
 
         # Selectors — sort by confidence descending
-        selectors = list(s.get("selectors", []))
+        selectors = list(s.get("selectors") or [])
         selectors.sort(key=lambda x: x.get("confidence", 0), reverse=True)
 
         # Intent — use enrichment or infer

@@ -6,14 +6,14 @@ Falls back through 4 tiers if selectors break: direct replay,
 selector healing, AI single-shot recovery, and full AI fallback.
 
 Prerequisites:
-    pip install observius playwright
+    pip install pokant playwright
     playwright install chromium
 
 Usage:
     # First compile a workflow:
-    #   python compile_workflow.py .observius/runs/<task-id>.json
+    #   python compile_workflow.py .pokant/runs/<task-id>.json
     # Then replay it:
-    python replay_workflow.py .observius/workflows/my-workflow.json
+    python replay_workflow.py .pokant/workflows/my-workflow.json
 
 Expected output:
     Replay: PASSED (5/5 steps)

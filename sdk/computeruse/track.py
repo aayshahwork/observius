@@ -35,7 +35,7 @@ class TrackConfig:
     retry_navigations: bool = True
     max_navigation_retries: int = 3
     session_key: Optional[str] = None
-    output_dir: str = ".observius"
+    output_dir: str = ".pokant"
     task_id: Optional[str] = None
 
     # API reporting (optional)
@@ -342,10 +342,11 @@ class TrackedPage:
                 )
             raise
 
-    async def select_option(self, selector: str, **kwargs: Any) -> Any:
+    async def select_option(self, selector: str, value: Any = None, **kwargs: Any) -> Any:
+        args = (selector,) if value is None else (selector, value)
         return await self._tracked_action(
             "select", f"select_option({selector})",
-            self._page.select_option, selector, **kwargs,
+            self._page.select_option, *args, **kwargs,
         )
 
     async def press(self, selector: str, key: str, **kwargs: Any) -> Any:
@@ -585,20 +586,63 @@ async def track(
                 has_failure = any(
                     not s.success for s in tracked._steps
                 )
+                status = "failed" if has_failure else "completed"
+
+                # Extract error info from the first failed step
+                error_message = None
+                error_category = None
+                if has_failure:
+                    from computeruse.error_classifier import classify_error_message
+                    for s in tracked._steps:
+                        if not s.success and getattr(s, "error", None):
+                            error_message = str(s.error)[:500]
+                            try:
+                                classified = classify_error_message(
+                                    error_message,
+                                )
+                                error_category = classified.category
+                            except Exception:
+                                pass
+                            break
+
+                # Run analysis so the dashboard can show suggestions
+                analysis = None
+                try:
+                    import os
+                    from computeruse.analyzer import AnalysisConfig, RunAnalyzer
+
+                    llm_key = os.environ.get("ANTHROPIC_API_KEY") or None
+                    analysis = await RunAnalyzer(AnalysisConfig(
+                        llm_api_key=llm_key,
+                    )).analyze(
+                        tracked._steps, status, None, "", cfg.output_dir,
+                    )
+                except Exception:
+                    pass
+
+                # Extract start URL from first navigation step
+                start_url = ""
+                for s in tracked._steps:
+                    if s.action_type == "navigate" and getattr(s, "post_url", ""):
+                        start_url = s.post_url
+                        break
+
                 await report_to_api(
                     api_url=cfg.api_url,
                     api_key=cfg.api_key,
                     task_id=tracked._run_id,
                     task_description="Playwright session",
-                    status="failed" if has_failure else "completed",
+                    status=status,
                     steps=tracked._steps,
                     cost_cents=0.0,
-                    error_category=None,
-                    error_message=None,
+                    error_category=error_category,
+                    error_message=error_message,
                     duration_ms=int(
                         (time.monotonic() - tracked._start_time) * 1000
                     ),
                     created_at=tracked._start_dt,
+                    analysis=analysis,
+                    url=start_url,
                 )
             except Exception:
                 pass

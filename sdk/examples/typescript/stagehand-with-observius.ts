@@ -1,17 +1,17 @@
 /**
- * Example: Using Stagehand (TypeScript) with Observius reporting.
+ * Example: Using Stagehand (TypeScript) with Pokant reporting.
  *
  * Prerequisites:
  *   npm install stagehand @anthropic-ai/sdk
- *   Observius running: make dev
+ *   Pokant running: make dev
  */
 import { Stagehand } from "stagehand";
-import { ObserviusReporter } from "./observius-reporter";
+import { PokantReporter } from "./pokant-reporter";
 
 async function main() {
-  const reporter = new ObserviusReporter({
-    apiUrl: process.env.OBSERVIUS_API_URL || "http://localhost:8000",
-    apiKey: process.env.OBSERVIUS_API_KEY || "cu_test_testkey1234567890abcdef12",
+  const reporter = new PokantReporter({
+    apiUrl: process.env.POKANT_API_URL || "http://localhost:8000",
+    apiKey: process.env.POKANT_API_KEY || "cu_test_testkey1234567890abcdef12",
   });
 
   const stagehand = new Stagehand({ env: "LOCAL" });

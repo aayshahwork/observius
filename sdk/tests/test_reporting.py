@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from computeruse._reporting import _encode_screenshot, report_to_api
+from computeruse._reporting import _encode_screenshot, _try_compile_workflow, report_to_api
 
 
 # ---------------------------------------------------------------------------
@@ -62,8 +62,10 @@ class TestReportToApi:
         assert req.get_header("X-api-key") == "test-key-123"
 
         body = json.loads(req.data.decode("utf-8"))
-        assert body["task_id"] == "task-abc"
-        assert body["task_description"] == "Test task"
+        # Non-UUID task_id is replaced with a generated UUID; original appears in description
+        import uuid as _uuid
+        _uuid.UUID(body["task_id"])  # must be a valid UUID now
+        assert body["task_description"] == "[task-abc] Test task"
         assert body["status"] == "completed"
         assert body["executor_mode"] == "sdk"
         assert body["cost_cents"] == 1.5
@@ -231,3 +233,82 @@ class TestEncodeScreenshot:
     def test_returns_none_for_empty_bytes(self):
         step = SimpleNamespace(screenshot_bytes=b"")
         assert _encode_screenshot(step) is None
+
+
+# ---------------------------------------------------------------------------
+# _try_compile_workflow
+# ---------------------------------------------------------------------------
+
+
+class TestTryCompileWorkflow:
+    def test_compiles_for_failed_status(self):
+        steps = [SimpleNamespace(action_type="click", description="click btn")]
+        result = _try_compile_workflow("t1", steps, "https://example.com", "failed")
+        assert result is not None
+
+    def test_returns_none_for_empty_steps(self):
+        result = _try_compile_workflow("t1", [], "https://example.com", "completed")
+        assert result is None
+
+    def test_compiles_completed_run(self):
+        steps = [
+            SimpleNamespace(
+                action_type="navigate",
+                description="goto page",
+                pre_url="https://example.com",
+            ),
+            SimpleNamespace(
+                action_type="click",
+                description="click login",
+                selectors=[{"type": "css", "value": "#login", "confidence": 0.9}],
+            ),
+        ]
+        result = _try_compile_workflow("t1", steps, "https://example.com", "completed")
+        assert result is not None
+        assert result["name"] == "t1"
+        assert result["start_url"] == "https://example.com"
+        assert len(result["steps"]) == 2
+
+    def test_includes_compiled_workflow_in_payload(self):
+        steps = [
+            SimpleNamespace(
+                action_type="click",
+                description="click btn",
+                tokens_in=10,
+                tokens_out=5,
+                duration_ms=100,
+                success=True,
+                error=None,
+                screenshot_bytes=None,
+                selectors=[{"type": "css", "value": "#btn", "confidence": 0.95}],
+            ),
+        ]
+        with patch("computeruse._reporting.urllib.request.urlopen") as mock:
+            mock.return_value = MagicMock()
+            import asyncio
+            asyncio.get_event_loop().run_until_complete(
+                report_to_api(
+                    api_url="http://localhost:3000",
+                    api_key="key",
+                    task_id="t1",
+                    task_description="test",
+                    status="completed",
+                    steps=steps,
+                    cost_cents=0.1,
+                    error_category=None,
+                    error_message=None,
+                    duration_ms=100,
+                    created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                )
+            )
+        body = json.loads(mock.call_args[0][0].data.decode("utf-8"))
+        assert "compiled_workflow" in body
+        assert body["compiled_workflow"] is not None
+        assert body["compiled_workflow"]["name"] == "t1"
+
+    def test_compilation_failure_returns_none(self):
+        """If compiler raises, _try_compile_workflow returns None gracefully."""
+        with patch("computeruse.compiler.WorkflowCompiler") as mock_cls:
+            mock_cls.return_value.compile_from_steps.side_effect = Exception("boom")
+            result = _try_compile_workflow("t1", [object()], "https://example.com", "completed")
+        assert result is None

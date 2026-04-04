@@ -1,16 +1,16 @@
 """
 computeruse/tracker.py -- Generic observability tracker for custom agent loops.
 
-Provides ObserviusTracker, a synchronous, framework-agnostic class that lets
-developers push step-level data into Observius without using Browser Use or
+Provides PokantTracker, a synchronous, framework-agnostic class that lets
+developers push step-level data into Pokant without using Browser Use or
 Playwright.  Reuses existing SDK infrastructure: StuckDetector, ReplayGenerator,
 cost calculation, error classification, and API reporting.
 
 Usage::
 
-    from computeruse import ObserviusTracker
+    from computeruse import PokantTracker
 
-    tracker = ObserviusTracker(task_description="Extract pricing")
+    tracker = PokantTracker(task_description="Extract pricing")
     tracker.start()
 
     tracker.record_step(
@@ -46,7 +46,7 @@ from computeruse.models import StepData
 from computeruse.replay_generator import ReplayGenerator
 from computeruse.stuck_detector import StuckDetector, StuckSignal
 
-logger = logging.getLogger("observius")
+logger = logging.getLogger("pokant")
 
 _NOT_STUCK = StuckSignal()
 
@@ -58,7 +58,7 @@ _NOT_STUCK = StuckSignal()
 
 @dataclass(frozen=True)
 class TrackerConfig:
-    """Configuration for :class:`ObserviusTracker`."""
+    """Configuration for :class:`PokantTracker`."""
 
     task_description: str = ""
 
@@ -71,7 +71,7 @@ class TrackerConfig:
     # Output
     save_screenshots: bool = True
     generate_replay: bool = True
-    output_dir: str = ".observius"
+    output_dir: str = ".pokant"
 
     # API reporting
     api_url: Optional[str] = None
@@ -96,7 +96,7 @@ class TrackerConfig:
 # ---------------------------------------------------------------------------
 
 
-class ObserviusTracker:
+class PokantTracker:
     """Generic observability tracker for custom agent loops.
 
     Provides step recording, stuck detection, cost tracking, replay
@@ -105,7 +105,7 @@ class ObserviusTracker:
 
     Usage::
 
-        tracker = ObserviusTracker(task_description="My task")
+        tracker = PokantTracker(task_description="My task")
         tracker.start()
         tracker.record_step(action_type="navigate", description="...")
         tracker.complete(result={"key": "value"})
@@ -155,7 +155,7 @@ class ObserviusTracker:
 
     # -- Context manager / cleanup -------------------------------------------
 
-    def __enter__(self) -> "ObserviusTracker":
+    def __enter__(self) -> "PokantTracker":
         if not self._started:
             self.start()
         return self
@@ -175,7 +175,7 @@ class ObserviusTracker:
             self.complete()
         return False
 
-    async def __aenter__(self) -> "ObserviusTracker":
+    async def __aenter__(self) -> "PokantTracker":
         if not self._started:
             self.start()
         return self
@@ -655,7 +655,7 @@ class ObserviusTracker:
         if not self._analysis or not self._analysis.findings:
             return
         logger.info(
-            "\n%s\nOBSERVIUS ANALYSIS: %s\n%s",
+            "\n%s\nPOKANT ANALYSIS: %s\n%s",
             "=" * 60, self._analysis.summary, "=" * 60,
         )
         logger.info("Suggestion: %s", self._analysis.primary_suggestion)
@@ -862,7 +862,7 @@ class ObserviusTracker:
         error_category: Optional[str] = None,
         error_message: Optional[str] = None,
     ) -> None:
-        """Report to Observius API if configured.  Never raises."""
+        """Report to Pokant API if configured.  Never raises."""
         if not self._config.api_url or not self._config.api_key:
             return
         try:
@@ -929,21 +929,21 @@ def create_tracker(
     api_url: Optional[str] = None,
     api_key: Optional[str] = None,
     **kwargs: Any,
-) -> ObserviusTracker:
-    """Convenience factory for :class:`ObserviusTracker`.
+) -> PokantTracker:
+    """Convenience factory for :class:`PokantTracker`.
 
     Args:
         task_description: Human-readable description of the task.
         page: Browser page for auto-screenshots (optional).
         screenshot_fn: Manual screenshot callable (optional).
-        api_url: Observius API base URL (optional).
-        api_key: Observius API key (optional).
+        api_url: Pokant API base URL (optional).
+        api_key: Pokant API key (optional).
         **kwargs: Forwarded to :class:`TrackerConfig`.
 
     Returns:
-        A new :class:`ObserviusTracker`.
+        A new :class:`PokantTracker`.
     """
-    return ObserviusTracker(
+    return PokantTracker(
         TrackerConfig(
             task_description=task_description,
             page=page,

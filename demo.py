@@ -1,5 +1,5 @@
 """
-Observius demo — multi-source intelligence pipeline as a single tracked task.
+Pokant demo — multi-source intelligence pipeline as a single tracked task.
 
 Run from the repo root before opening the dashboard:
 
@@ -43,17 +43,17 @@ TASKS = [
 
 
 def run_demo() -> None:
-    # Create client WITHOUT observius config so it doesn't auto-report each sub-task.
+    # Create client WITHOUT pokant config so it doesn't auto-report each sub-task.
     # We'll report the combined task manually at the end.
-    cu = ComputerUse(observius_api_url="", observius_api_key="")
+    cu = ComputerUse(pokant_api_url="", pokant_api_key="")
 
-    observius_api_url = os.environ.get("OBSERVIUS_API_URL", "")
-    observius_api_key = os.environ.get("OBSERVIUS_API_KEY", "")
+    pokant_api_url = os.environ.get("POKANT_API_URL", "")
+    pokant_api_key = os.environ.get("POKANT_API_KEY", "")
 
-    if observius_api_url and observius_api_key:
-        console.print(f"[green]Dashboard reporting enabled[/green] (single combined task) -> {observius_api_url}\n")
+    if pokant_api_url and pokant_api_key:
+        console.print(f"[green]Dashboard reporting enabled[/green] (single combined task) -> {pokant_api_url}\n")
     else:
-        console.print("[dim]Dashboard reporting disabled (set OBSERVIUS_API_URL and OBSERVIUS_API_KEY in .env)[/dim]\n")
+        console.print("[dim]Dashboard reporting disabled (set POKANT_API_URL and POKANT_API_KEY in .env)[/dim]\n")
 
     records: list[dict] = []
     all_steps: list[StepData] = []
@@ -139,8 +139,8 @@ def run_demo() -> None:
     )
     console.print("\n[bold green]v Report saved to intel_report.json[/]")
 
-    # Report as ONE combined task to Observius dashboard
-    if observius_api_url and observius_api_key:
+    # Report as ONE combined task to Pokant dashboard
+    if pokant_api_url and pokant_api_key:
         try:
             from computeruse._reporting import _report_to_api_sync
             from computeruse.analyzer import AnalysisConfig, RunAnalyzer
@@ -181,8 +181,8 @@ def run_demo() -> None:
 
             import uuid
             ok = _report_to_api_sync(
-                api_url=observius_api_url,
-                api_key=observius_api_key,
+                api_url=pokant_api_url,
+                api_key=pokant_api_key,
                 task_id=str(uuid.uuid4()),
                 task_description="Multi-source intelligence pipeline: " + ", ".join(
                     t["description"] for t in TASKS

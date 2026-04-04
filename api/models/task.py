@@ -59,6 +59,8 @@ class Task(Base):
     error_category: Mapped[str | None] = mapped_column(String(50))
     executor_mode: Mapped[str | None] = mapped_column(String(20), server_default=text("'browser_use'"))
     analysis_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    compiled_workflow_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    playwright_script: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

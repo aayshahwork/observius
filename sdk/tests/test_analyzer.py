@@ -873,18 +873,18 @@ class TestRunAnalyzer:
 
 
 class TestTrackerAnalysis:
-    """Tests for analysis integration in ObserviusTracker."""
+    """Tests for analysis integration in PokantTracker."""
 
     def test_tracker_fail_has_analysis(self, tmp_path: Path) -> None:
         """Fail a tracker -> analysis property populated."""
-        from computeruse.tracker import ObserviusTracker, TrackerConfig
+        from computeruse.tracker import PokantTracker, TrackerConfig
 
         config = TrackerConfig(
             task_description="Test task",
             output_dir=str(tmp_path),
             analysis=AnalysisConfig(enable_analysis=True, enable_history=False),
         )
-        tracker = ObserviusTracker(config=config)
+        tracker = PokantTracker(config=config)
         tracker.start()
         for i in range(1, 6):
             tracker.record_step(
@@ -899,14 +899,14 @@ class TestTrackerAnalysis:
 
     def test_tracker_complete_has_analysis(self, tmp_path: Path) -> None:
         """Complete a tracker -> analysis property populated."""
-        from computeruse.tracker import ObserviusTracker, TrackerConfig
+        from computeruse.tracker import PokantTracker, TrackerConfig
 
         config = TrackerConfig(
             task_description="Test task",
             output_dir=str(tmp_path),
             analysis=AnalysisConfig(enable_analysis=True, enable_history=False),
         )
-        tracker = ObserviusTracker(config=config)
+        tracker = PokantTracker(config=config)
         tracker.start()
         tracker.record_step(action_type="navigate", description="Go to page")
         tracker.record_step(action_type="click", description="Click")
@@ -918,14 +918,14 @@ class TestTrackerAnalysis:
 
     def test_analysis_in_run_metadata_json(self, tmp_path: Path) -> None:
         """Fail a tracker -> JSON file contains analysis key."""
-        from computeruse.tracker import ObserviusTracker, TrackerConfig
+        from computeruse.tracker import PokantTracker, TrackerConfig
 
         config = TrackerConfig(
             task_description="Test",
             output_dir=str(tmp_path),
             analysis=AnalysisConfig(enable_analysis=True, enable_history=False),
         )
-        tracker = ObserviusTracker(config=config)
+        tracker = PokantTracker(config=config)
         tracker.start()
         for i in range(1, 6):
             tracker.record_step(

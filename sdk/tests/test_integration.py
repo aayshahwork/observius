@@ -339,7 +339,7 @@ async def test_budget_circuit_breaker_stops_agent(tmp_path: Path) -> None:
     config = WrapConfig(
         max_cost_cents=1.0,
         max_retries=0,
-        output_dir=str(tmp_path / ".observius"),
+        output_dir=str(tmp_path / ".pokant"),
         generate_replay=False,
         save_screenshots=False,
         enable_stuck_detection=False,
@@ -407,7 +407,7 @@ async def test_enrichment_graceful_degradation_in_track(
 
     page = MockPage()
     config = TrackConfig(
-        output_dir=str(tmp_path / ".observius"),
+        output_dir=str(tmp_path / ".pokant"),
         capture_screenshots=False,
     )
 
@@ -440,7 +440,7 @@ async def test_enrichment_graceful_degradation_in_track(
     # All succeeded despite enrichment failures
     assert all(s.success for s in t.steps)
     # Run metadata was saved
-    runs_dir = tmp_path / ".observius" / "runs"
+    runs_dir = tmp_path / ".pokant" / "runs"
     run_files = list(runs_dir.glob("*.json"))
     assert len(run_files) == 1
 

@@ -15,7 +15,7 @@ from computeruse.cli.main import cli
 
 @pytest.fixture()
 def data_dir(tmp_path: Path) -> Path:
-    """Create a pre-populated .observius directory."""
+    """Create a pre-populated .pokant directory."""
     runs_dir = tmp_path / "runs"
     runs_dir.mkdir()
     ss_dir = tmp_path / "screenshots"

@@ -38,7 +38,7 @@
 ## Phase 8: PyPI prep
 - [x] Bump version to 0.2.0 in pyproject.toml
 - [x] Bump version to 0.2.0 in __init__.py
-- [x] Verify python3 -m build succeeds (observius-0.2.0-py3-none-any.whl)
+- [x] Verify python3 -m build succeeds (pokant-0.2.0-py3-none-any.whl)
 
 ## Phase 9: Verify
 - [x] 511 passed, 3 pre-existing failures (stale enum count, UUID format, event loop)

@@ -49,6 +49,7 @@ class TaskIngestRequest(BaseModel):
     completed_at: str | None = None
     analysis: dict[str, Any] | None = None
     result: dict[str, Any] | None = None
+    compiled_workflow: dict[str, Any] | None = None
 
     @field_validator("status")
     @classmethod
@@ -110,6 +111,8 @@ class TaskResponse(BaseModel):
     total_tokens_out: int = 0
     executor_mode: str = "browser_use"
     analysis: dict[str, Any] | None = None
+    compiled_workflow: dict[str, Any] | None = None
+    playwright_script: str | None = None
 
     model_config = {"from_attributes": True}
 

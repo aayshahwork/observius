@@ -1,5 +1,5 @@
 /**
- * Shared fixtures and helpers for Observius dashboard E2E tests.
+ * Shared fixtures and helpers for Pokant dashboard E2E tests.
  *
  * All tests use route interception (page.route) to mock API responses so they
  * run without a live backend.

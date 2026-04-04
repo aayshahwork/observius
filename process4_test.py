@@ -33,8 +33,8 @@ async def main():
         print(f"Replay saved to form_test.html")
         
         import os
-        if os.path.exists(".observius/runs"):
-            runs = os.listdir(".observius/runs")
+        if os.path.exists(".pokant/runs"):
+            runs = os.listdir(".pokant/runs")
             print(f"Total runs saved: {len(runs)}")
         
         await browser.close()

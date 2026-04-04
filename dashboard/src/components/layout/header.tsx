@@ -28,7 +28,7 @@ export function MobileHeader() {
           <Button variant="ghost" size="icon-sm" onClick={() => setOpen(true)}>
             <Menu className="size-5" />
           </Button>
-          <span className="ml-3 text-sm font-semibold">ComputerUse.dev</span>
+          <span className="ml-3 text-sm font-semibold">Pokant</span>
         </div>
         <div className="ml-auto">
           <AlertBell />

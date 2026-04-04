@@ -1,5 +1,5 @@
 """
-Fill out a web form using Observius.
+Fill out a web form using Pokant.
 
 Navigates to https://httpbin.org/forms/post, fills every field with sample
 data, submits the form, and returns a confirmation with the submitted values.

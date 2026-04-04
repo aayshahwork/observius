@@ -15,7 +15,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "ComputerUse.dev",
+  title: "Pokant",
   description: "Managed browser automation, powered by AI.",
 };
 

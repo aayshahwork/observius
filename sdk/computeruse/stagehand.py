@@ -38,7 +38,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 from computeruse.models import ActionType, StepData
 from computeruse.replay_generator import ReplayGenerator
 
-logger = logging.getLogger("observius")
+logger = logging.getLogger("pokant")
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 
@@ -48,7 +48,7 @@ class StagehandConfig:
     """Configuration for the observe_stagehand() context manager."""
 
     capture_screenshots: bool = True
-    output_dir: str = ".observius"
+    output_dir: str = ".pokant"
     task_id: Optional[str] = None
 
     # API reporting (optional)

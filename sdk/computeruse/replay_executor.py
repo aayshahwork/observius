@@ -57,7 +57,7 @@ class ReplayConfig:
     fallback_model: str = "claude-haiku-4-5-20251001"
     full_fallback_model: str = ""  # Empty = skip Tier 3
     save_screenshots: bool = True
-    output_dir: str = ".observius"
+    output_dir: str = ".pokant"
     verify_actions: bool = True
 
 

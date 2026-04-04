@@ -1,6 +1,6 @@
-from computeruse import ObserviusTracker
+from computeruse import PokantTracker
 
-tracker = ObserviusTracker(
+tracker = PokantTracker(
     task_description="Custom agent: scrape 3 pages",
     api_url="http://localhost:8000",
     api_key="cu_test_testkey1234567890abcdef12",
@@ -46,7 +46,7 @@ print(f"Stuck: {tracker.is_stuck}")
 
 # Test stuck detection
 print("\n--- Stuck detection test ---")
-stuck_tracker = ObserviusTracker(task_description="Stuck agent test")
+stuck_tracker = PokantTracker(task_description="Stuck agent test")
 stuck_tracker.start()
 for i in range(6):
     stuck_tracker.record_step(

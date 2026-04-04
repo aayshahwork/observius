@@ -523,7 +523,7 @@ test.describe("Overview page — sidebar", () => {
     await setupPopulated(page);
     await page.goto("/overview");
 
-    const logo = page.getByRole("link", { name: "ComputerUse.dev" });
+    const logo = page.getByRole("link", { name: "Pokant" });
     await expect(logo).toHaveAttribute("href", "/overview");
   });
 });

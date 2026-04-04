@@ -23,11 +23,11 @@ from computeruse.retry import RetryHandler
 logger = logging.getLogger(__name__)
 
 # Directory where completed TaskResult objects are cached as JSON files.
-# Stored under .observius/ to match the SDK's standard data directory.
-_TASK_STORE = Path(".observius") / "tasks"
+# Stored under .pokant/ to match the SDK's standard data directory.
+_TASK_STORE = Path(".pokant") / "tasks"
 
 # Hosted cloud API base URL.
-_CLOUD_API_BASE = "https://api.computeruse.dev/v1"
+_CLOUD_API_BASE = "https://api.pokant.dev/v1"
 
 # Seconds between cloud-task status polls.
 _POLL_INTERVAL: float = 2.0
@@ -74,8 +74,8 @@ class ComputerUse:
         model: str = settings.DEFAULT_MODEL,
         headless: bool = False,
         browserbase_api_key: Optional[str] = None,
-        observius_api_url: Optional[str] = None,
-        observius_api_key: Optional[str] = None,
+        pokant_api_url: Optional[str] = None,
+        pokant_api_key: Optional[str] = None,
     ) -> None:
         """Initialise the ComputerUse client.
 
@@ -88,10 +88,10 @@ class ComputerUse:
             headless: Run the browser without a visible window.
             browserbase_api_key: BrowserBase API key for managed remote
                 browsers in local mode.
-            observius_api_url: Base URL of the Observius API for automatic
-                run reporting.  Falls back to ``OBSERVIUS_API_URL`` env var.
-            observius_api_key: API key for the Observius ingest endpoint.
-                Falls back to ``OBSERVIUS_API_KEY`` env var.
+            pokant_api_url: Base URL of the Pokant API for automatic
+                run reporting.  Falls back to ``POKANT_API_URL`` env var.
+            pokant_api_key: API key for the Pokant ingest endpoint.
+                Falls back to ``POKANT_API_KEY`` env var.
 
         Raises:
             ValueError: If ``local=False`` and no ``api_key`` is provided.
@@ -101,8 +101,8 @@ class ComputerUse:
         self.model = model
         self.headless = headless
         self.browserbase_api_key = browserbase_api_key or settings.BROWSERBASE_API_KEY
-        self.observius_api_url = observius_api_url or settings.OBSERVIUS_API_URL
-        self.observius_api_key = observius_api_key or settings.OBSERVIUS_API_KEY
+        self.pokant_api_url = pokant_api_url or settings.POKANT_API_URL
+        self.pokant_api_key = pokant_api_key or settings.POKANT_API_KEY
 
         if not local and not api_key:
             raise ValueError(
@@ -279,14 +279,14 @@ class ComputerUse:
         result = await self._dispatch(config)
         self._cache_result(result)
 
-        # Best-effort reporting to Observius dashboard
-        if self.local and self.observius_api_url and self.observius_api_key:
+        # Best-effort reporting to Pokant dashboard
+        if self.local and self.pokant_api_url and self.pokant_api_key:
             try:
                 from computeruse._reporting import report_to_api
 
                 await report_to_api(
-                    api_url=self.observius_api_url,
-                    api_key=self.observius_api_key,
+                    api_url=self.pokant_api_url,
+                    api_key=self.pokant_api_key,
                     task_id=result.task_id,
                     task_description=config.task,
                     status=result.status,
@@ -300,9 +300,9 @@ class ComputerUse:
                     url=str(config.url) if config.url else "",
                     result=result.result if isinstance(result.result, dict) else ({"text": result.result} if result.result else None),
                 )
-                logger.info("Reported task %s to Observius API", result.task_id)
+                logger.info("Reported task %s to Pokant API", result.task_id)
             except Exception:
-                logger.debug("Observius API reporting failed (best-effort)", exc_info=True)
+                logger.debug("Pokant API reporting failed (best-effort)", exc_info=True)
 
         return result
 

@@ -1,5 +1,5 @@
 -- 001_initial_schema.sql
--- ComputerUse.dev: Initial database schema
+-- Pokant: Initial database schema
 -- Creates uuid_generate_v7(), all tables, indexes, and RLS policies.
 
 BEGIN;

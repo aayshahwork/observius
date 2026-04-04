@@ -49,7 +49,7 @@ Thumbs.db
 .tasks/
 
 # SDK runtime output
-.observius/
+.pokant/
 /replays/
 /sessions/
 *.egg-info/
@@ -67,3 +67,4 @@ demo_interactive.py
 demo_short.py
 test_demo.py
 sdk/run_demo.py
+.observius/

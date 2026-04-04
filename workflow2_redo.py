@@ -1,6 +1,6 @@
 import asyncio
 from playwright.async_api import async_playwright
-from computeruse import ObserviusTracker
+from computeruse import PokantTracker
 
 async def main():
     async with async_playwright() as p:
@@ -8,7 +8,7 @@ async def main():
         page = await browser.new_page()
         
         # Test 1: page= auto-screenshot
-        tracker = ObserviusTracker(
+        tracker = PokantTracker(
             page=page,
             task_description="Auto-screenshot tracker test",
             api_url="http://localhost:8000",
@@ -31,7 +31,7 @@ async def main():
         print(f"  Replay: {tracker.replay_path}")
         
         # Test 2: Context helpers (no browser needed)
-        ctx_tracker = ObserviusTracker(
+        ctx_tracker = PokantTracker(
             task_description="Context system test",
             api_url="http://localhost:8000",
             api_key="cu_test_testkey1234567890abcdef12",
@@ -67,7 +67,7 @@ async def main():
         print(f"  Replay: {ctx_tracker.replay_path}")
         
         # Test 3: Stuck detection still works
-        stuck = ObserviusTracker(task_description="Stuck test")
+        stuck = PokantTracker(task_description="Stuck test")
         stuck.start()
         for i in range(6):
             stuck.record_step(action_type="click", description="click(#submit)")
@@ -76,7 +76,7 @@ async def main():
         stuck.complete()
         
         # Test 4: screenshot_fn manual override
-        fn_tracker = ObserviusTracker(
+        fn_tracker = PokantTracker(
             screenshot_fn=lambda: b"fake-screenshot-bytes",
             task_description="screenshot_fn test",
         )

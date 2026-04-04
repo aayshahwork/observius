@@ -396,6 +396,12 @@ class StepData(BaseModel):
     control_type: str = Field(default="", description="Desktop control type (desktop automation)")
     control_name: str = Field(default="", description="Desktop control name (desktop automation)")
 
+    # -- Retry intelligence fields (appended by AR3) ---------------------------
+    attempt_number: int = Field(
+        default=1,
+        description="Which retry attempt produced this step (1-based)",
+    )
+
 
 # ---------------------------------------------------------------------------
 # Compiled workflow models (explore-to-replay)

@@ -16,6 +16,7 @@ import { HourlyActivityChart } from "@/components/health/hourly-activity-chart";
 import { FailureHotspots } from "@/components/health/failure-hotspots";
 import { ErrorBreakdownChart } from "@/components/health/error-breakdown-chart";
 import { ExecutorCards } from "@/components/health/executor-cards";
+import { RetryStatsCard } from "@/components/health/retry-stats-card";
 import type { AnalyticsPeriod, HealthAnalyticsResponse } from "@/lib/types";
 
 export default function HealthPage() {
@@ -133,6 +134,9 @@ export default function HealthPage() {
 
       {/* Executor Performance */}
       <ExecutorCards data={data.executor_breakdown} />
+
+      {/* Retry Intelligence */}
+      <RetryStatsCard data={data.retry_stats} />
 
       {/* Active Alerts */}
       {data.alerts.length > 0 && (

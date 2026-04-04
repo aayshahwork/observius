@@ -6,18 +6,18 @@ a deterministic CompiledWorkflow that can be replayed without AI.
 Optionally generates a standalone Playwright script.
 
 Prerequisites:
-    pip install observius
+    pip install pokant
 
 Usage:
     # First, run a task to generate a run file:
     #   python browser_use_basic.py
     # Then compile it:
-    python compile_workflow.py .observius/runs/<task-id>.json
+    python compile_workflow.py .pokant/runs/<task-id>.json
 
 Expected output:
     Compiled: my-workflow (5 steps, 2 parameters)
-    Saved to: .observius/workflows/my-workflow.json
-    Script:   .observius/workflows/my-workflow.py
+    Saved to: .pokant/workflows/my-workflow.json
+    Script:   .pokant/workflows/my-workflow.py
 """
 
 import sys
@@ -41,12 +41,12 @@ def main() -> None:
         sys.exit(1)
 
     # Save the compiled workflow JSON
-    wf_path = compiler.save_workflow(workflow, output_dir=".observius/workflows")
+    wf_path = compiler.save_workflow(workflow, output_dir=".pokant/workflows")
     print(f"Compiled: {workflow.name} ({len(workflow.steps)} steps, {len(workflow.parameters)} parameters)")
     print(f"Saved to: {wf_path}")
 
     # Generate a standalone Playwright script
-    script_path = str(Path(".observius/workflows") / f"{workflow.name}.py")
+    script_path = str(Path(".pokant/workflows") / f"{workflow.name}.py")
     script = compiler.generate_playwright_script(workflow, output_path=script_path)
     print(f"Script:   {script_path}")
 

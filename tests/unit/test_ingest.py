@@ -27,7 +27,7 @@ TEST_ACCOUNT_ID = uuid.uuid4()
 def _make_account(**overrides):
     defaults = dict(
         id=TEST_ACCOUNT_ID,
-        email="test@computeruse.dev",
+        email="test@pokant.dev",
         name="Test Account",
         tier="free",
         monthly_step_limit=500,
@@ -72,6 +72,8 @@ def _make_task(account_id: uuid.UUID, **overrides):
         total_tokens_out=0,
         executor_mode="sdk",
         analysis_json=None,
+        compiled_workflow_json=None,
+        playwright_script=None,
     )
     defaults.update(overrides)
     task = MagicMock()
@@ -335,14 +337,20 @@ class TestIngestTask:
 # ---------------------------------------------------------------------------
 
 class TestIngestEdgeCases:
-    def test_invalid_uuid_task_id_returns_422(self, client, mock_db):
-        """POST with malformed task_id -> 422."""
+    def test_non_uuid_task_id_accepted_with_generated_uuid(self, client, mock_db):
+        """POST with human-readable task_id -> 201, UUID is generated."""
+        _setup_no_duplicate(mock_db)
+
         resp = client.post(
             "/api/v1/tasks/ingest",
-            json={"task_id": "not-a-uuid", "status": "completed"},
+            json={"task_id": "my-test-run", "status": "completed"},
         )
-        assert resp.status_code == 422
-        assert resp.json()["detail"]["error_code"] == "INVALID_INPUT"
+        assert resp.status_code == 201
+        data = resp.json()
+        # task_id in response should be a valid UUID (not the original string)
+        import uuid
+        uuid.UUID(data["task_id"])
+        assert "my-test-run" in (data.get("task_description") or "")
 
     def test_failed_status_sets_success_false(self, client, mock_db):
         """Ingesting a failed task sets success=False."""
@@ -702,6 +710,80 @@ class TestIngestEdgeCases:
 
         assert resp.status_code == 201
         assert resp.json()["executor_mode"] == "sdk"
+
+    def test_compiled_workflow_stored(self, client, mock_db):
+        """POST with compiled_workflow -> stored on Task row."""
+        _setup_no_duplicate(mock_db)
+
+        workflow = {
+            "name": "login_flow",
+            "steps": [
+                {
+                    "action_type": "goto",
+                    "selectors": [],
+                    "fill_value_template": "",
+                    "intent": "Navigate to login",
+                    "timeout_ms": 2000,
+                    "pre_url": "https://example.com/login",
+                }
+            ],
+            "start_url": "https://example.com/login",
+            "parameters": {},
+            "source_task_id": "test-123",
+            "compiled_at": "2026-04-03T12:00:00+00:00",
+        }
+
+        resp = client.post(
+            "/api/v1/tasks/ingest",
+            json={"status": "completed", "compiled_workflow": workflow},
+        )
+
+        assert resp.status_code == 201
+        task_obj = mock_db.add.call_args_list[0][0][0]
+        assert task_obj.compiled_workflow_json is not None
+        assert task_obj.compiled_workflow_json["name"] == "login_flow"
+        assert len(task_obj.compiled_workflow_json["steps"]) == 1
+
+    def test_compiled_workflow_in_response(self, client, mock_db, test_account):
+        """GET /tasks/{id} returns compiled_workflow when present."""
+        task_id = uuid.uuid4()
+        workflow_data = {
+            "name": "test_workflow",
+            "steps": [{"action_type": "click", "intent": "Click button"}],
+            "start_url": "https://example.com",
+            "parameters": {"email": ""},
+            "source_task_id": str(task_id),
+            "compiled_at": "2026-04-03T12:00:00+00:00",
+        }
+        task_mock = _make_task(
+            test_account.id,
+            id=task_id,
+            compiled_workflow_json=workflow_data,
+        )
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = task_mock
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        resp = client.get(f"/api/v1/tasks/{task_id}")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["compiled_workflow"] is not None
+        assert body["compiled_workflow"]["name"] == "test_workflow"
+        assert body["compiled_workflow"]["parameters"] == {"email": ""}
+
+    def test_compiled_workflow_null_when_absent(self, client, mock_db, test_account):
+        """GET /tasks/{id} returns null compiled_workflow when not compiled."""
+        task_id = uuid.uuid4()
+        task_mock = _make_task(test_account.id, id=task_id)
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = task_mock
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        resp = client.get(f"/api/v1/tasks/{task_id}")
+        assert resp.status_code == 200
+        assert resp.json()["compiled_workflow"] is None
 
 
 # ---------------------------------------------------------------------------

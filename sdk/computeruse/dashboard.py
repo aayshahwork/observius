@@ -1,7 +1,7 @@
 """
 computeruse/dashboard.py — Local debugging dashboard.
 
-A minimal FastAPI application that serves run data from the .observius/
+A minimal FastAPI application that serves run data from the .pokant/
 directory on disk. No database required.
 
 Usage::
@@ -9,7 +9,7 @@ Usage::
     from computeruse.dashboard import create_app
     import uvicorn
 
-    app = create_app(".observius")
+    app = create_app(".pokant")
     uvicorn.run(app, host="0.0.0.0", port=8080)
 """
 
@@ -38,11 +38,11 @@ def _load_runs(runs_dir: Path) -> List[Dict[str, Any]]:
     return results
 
 
-def create_app(data_dir: str = ".observius") -> FastAPI:
-    """Create the Observius local dashboard application.
+def create_app(data_dir: str = ".pokant") -> FastAPI:
+    """Create the Pokant local dashboard application.
 
     Args:
-        data_dir: Path to the .observius data directory.
+        data_dir: Path to the .pokant data directory.
 
     Returns:
         A configured FastAPI app ready to serve.
@@ -53,7 +53,7 @@ def create_app(data_dir: str = ".observius") -> FastAPI:
     replays_dir = base / "replays"
     workflows_dir = base / "workflows"
 
-    app = FastAPI(title="Observius Dashboard")
+    app = FastAPI(title="Pokant Dashboard")
 
     # -- API routes --------------------------------------------------------
 
@@ -93,6 +93,21 @@ def create_app(data_dir: str = ".observius") -> FastAPI:
             if cat:
                 error_categories[cat] = error_categories.get(cat, 0) + 1
 
+        # Adaptive retry stats
+        retry_runs = [r for r in all_runs if r.get("total_attempts", 1) > 1]
+        retry_category_counts: Dict[str, int] = {}
+        total_diag_cost = 0.0
+        for r in retry_runs:
+            for a in r.get("attempts", []):
+                diag = a.get("diagnosis")
+                if diag:
+                    total_diag_cost += diag.get("analysis_cost_cents", 0)
+                    cat = diag.get("category")
+                    if cat:
+                        retry_category_counts[cat] = (
+                            retry_category_counts.get(cat, 0) + 1
+                        )
+
         return {
             "total_runs": total,
             "completed": completed,
@@ -102,6 +117,16 @@ def create_app(data_dir: str = ".observius") -> FastAPI:
             "total_cost_cents": total_cost,
             "avg_duration_ms": avg_duration,
             "error_categories": error_categories,
+            "adaptive_retry_stats": {
+                "runs_retried": len(retry_runs),
+                "avg_attempts": round(
+                    sum(r.get("total_attempts", 1) for r in retry_runs)
+                    / max(len(retry_runs), 1),
+                    1,
+                ),
+                "total_diagnosis_cost_cents": round(total_diag_cost, 4),
+                "category_counts": retry_category_counts,
+            },
         }
 
     @app.get("/screenshots/{path:path}")

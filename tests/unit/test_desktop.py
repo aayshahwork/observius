@@ -11,7 +11,7 @@ from computeruse.desktop import (
     pillow_screenshot_fn,
     pyautogui_screenshot_fn,
 )
-from computeruse.tracker import ObserviusTracker, TrackerConfig
+from computeruse.tracker import PokantTracker, TrackerConfig
 
 
 class TestPyAutoGUIScreenshotFn:
@@ -99,7 +99,7 @@ class TestScreenshotFnWithTracker:
         """Tracker with a desktop screenshot_fn captures on every step."""
         expected_bytes = b"desktop-screenshot"
 
-        tracker = ObserviusTracker(TrackerConfig(
+        tracker = PokantTracker(TrackerConfig(
             output_dir=str(tmp_path),
             screenshot_fn=lambda: expected_bytes,
             enable_stuck_detection=False,

@@ -1,17 +1,17 @@
 /**
- * Observius Reporter — send browser agent results to Observius dashboard.
+ * Pokant Reporter — send browser agent results to Pokant dashboard.
  * Works with any TypeScript/JavaScript agent framework.
  * Zero dependencies — uses the built-in fetch() API.
  *
  * Usage:
- *   const reporter = new ObserviusReporter({ apiUrl: "http://localhost:8000", apiKey: "..." });
+ *   const reporter = new PokantReporter({ apiUrl: "http://localhost:8000", apiKey: "..." });
  *   reporter.start("Extract pricing from portal");
  *   reporter.recordStep({ actionType: "navigate", description: "Opened portal" });
  *   reporter.recordStep({ actionType: "extract", description: "Got prices", tokensIn: 1500 });
  *   await reporter.complete();
  */
 
-interface ObserviusConfig {
+interface PokantConfig {
   apiUrl: string;
   apiKey: string;
 }
@@ -39,15 +39,15 @@ interface IngestStep {
   duration_ms: number;
 }
 
-class ObserviusReporter {
-  private config: ObserviusConfig;
+class PokantReporter {
+  private config: PokantConfig;
   private taskDescription: string = "";
   private steps: IngestStep[] = [];
   private startTime: number = 0;
   private stepCount: number = 0;
   private lastStepTime: number = 0;
 
-  constructor(config: ObserviusConfig) {
+  constructor(config: PokantConfig) {
     this.config = config;
   }
 
@@ -118,17 +118,17 @@ class ObserviusReporter {
       );
 
       if (!response.ok) {
-        console.warn(`Observius reporting failed: ${response.status}`);
+        console.warn(`Pokant reporting failed: ${response.status}`);
         return null;
       }
 
       const data = await response.json();
       return data.task_id;
     } catch (e) {
-      console.warn("Observius reporting failed:", e);
+      console.warn("Pokant reporting failed:", e);
       return null;
     }
   }
 }
 
-export { ObserviusReporter, ObserviusConfig, StepData };
+export { PokantReporter, PokantConfig, StepData };

@@ -1216,7 +1216,7 @@ class RunAnalyzer:
         status: str = "failed",
         error: str | None = None,
         task_description: str = "",
-        data_dir: str = ".observius",
+        data_dir: str = ".pokant",
     ) -> RunAnalysis:
         """Run Tier 1 (always), Tier 2 (if history), Tier 3 (if LLM key + low confidence)."""
         findings: list[AnalysisFinding] = []
@@ -1277,7 +1277,7 @@ class RunAnalyzer:
         status: str = "failed",
         error: str | None = None,
         task_description: str = "",
-        data_dir: str = ".observius",
+        data_dir: str = ".pokant",
     ) -> RunAnalysis:
         """Synchronous wrapper for analyze().
 

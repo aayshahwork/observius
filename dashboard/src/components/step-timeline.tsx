@@ -98,9 +98,9 @@ function getNoScreenshotMessage(
       return "No visual \u2014 this is a non-browser step. Check Debug Context below for details.";
     }
     if (DESKTOP_ACTIONS.has(actionType.toLowerCase())) {
-      return "No screenshot \u2014 pass screenshot_fn= to ObserviusTracker for auto-screenshots.";
+      return "No screenshot \u2014 pass screenshot_fn= to PokantTracker for auto-screenshots.";
     }
-    return "No screenshot \u2014 agent ran without a browser page. Pass page= to ObserviusTracker for auto-screenshots.";
+    return "No screenshot \u2014 agent ran without a browser page. Pass page= to PokantTracker for auto-screenshots.";
   }
 
   if (executorMode === "browser_use" || executorMode === "native") {

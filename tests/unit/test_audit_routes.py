@@ -22,7 +22,7 @@ TEST_ACCOUNT_ID = uuid.uuid4()
 def _make_account(**overrides):
     defaults = dict(
         id=TEST_ACCOUNT_ID,
-        email="test@computeruse.dev",
+        email="test@pokant.dev",
         name="Test Account",
         tier="free",
         monthly_step_limit=500,

@@ -26,6 +26,35 @@ export interface AnalysisFinding {
   confidence: number;
 }
 
+export interface AttemptDiagnosis {
+  category: string;
+  subcategory: string;
+  root_cause: string;
+  retry_hint: string;
+  analysis_cost_cents: number;
+  analysis_method: string;
+  confidence: number;
+  is_retryable: boolean;
+}
+
+export interface AttemptRecoveryPlan {
+  should_retry: boolean;
+  fresh_browser: boolean;
+  stealth_mode: boolean;
+  clear_cookies: boolean;
+  increase_timeout: boolean;
+  reduce_max_actions: boolean;
+  extend_system_message: string;
+  modified_task: string;
+}
+
+export interface RetryAttempt {
+  attempt: number;
+  status: string;
+  diagnosis: AttemptDiagnosis | null;
+  recovery_plan: AttemptRecoveryPlan | null;
+}
+
 export interface RunAnalysis {
   summary: string;
   primary_suggestion: string;
@@ -33,6 +62,37 @@ export interface RunAnalysis {
   wasted_steps: number;
   wasted_cost_cents: number;
   tiers_executed: number[];
+  // Adaptive retry (AR3) — present when wrap() used adaptive retry
+  attempts?: RetryAttempt[];
+  total_attempts?: number;
+  adaptive_retry_used?: boolean;
+}
+
+export interface CompiledSelector {
+  type: string;
+  value: string;
+  confidence: number;
+}
+
+export interface CompiledStep {
+  action_type: string;
+  selectors: CompiledSelector[];
+  fill_value_template: string;
+  expected_url_pattern: string;
+  expected_element: string;
+  expected_text: string;
+  intent: string;
+  timeout_ms: number;
+  pre_url: string;
+}
+
+export interface CompiledWorkflow {
+  name: string;
+  steps: CompiledStep[];
+  start_url: string;
+  parameters: Record<string, string>;
+  source_task_id: string;
+  compiled_at: string;
 }
 
 export interface TaskResponse {
@@ -56,6 +116,8 @@ export interface TaskResponse {
   total_tokens_out: number;
   executor_mode: ExecutorMode;
   analysis?: RunAnalysis | null;
+  compiled_workflow?: CompiledWorkflow | null;
+  playwright_script?: string | null;
 }
 
 export interface TaskListResponse {
@@ -154,6 +216,23 @@ export interface ApiKeyCreateResponse {
   key_suffix: string;
   label: string | null;
   created_at: string;
+}
+
+// Scripts
+
+export interface ScriptEntry {
+  task_id: string;
+  task_description: string;
+  url: string;
+  status: string;
+  created_at: string | null;
+  playwright_script: string;
+}
+
+export interface ScriptListResponse {
+  scripts: ScriptEntry[];
+  total: number;
+  has_more: boolean;
 }
 
 // Alerts

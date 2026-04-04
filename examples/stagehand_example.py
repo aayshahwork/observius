@@ -1,5 +1,5 @@
 """
-Example: Using Observius to track a Stagehand session.
+Example: Using Pokant to track a Stagehand session.
 
 Requires:
     pip install stagehand computeruse playwright
@@ -31,7 +31,7 @@ async def main() -> None:
         page = browser.contexts[0].pages[0]
 
         try:
-            # 3. Wrap the session with Observius tracking
+            # 3. Wrap the session with Pokant tracking
             async with observe_stagehand(session, page=page) as t:
                 await t.navigate("https://news.ycombinator.com")
                 await t.act("click on the first article link")

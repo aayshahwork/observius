@@ -1,4 +1,4 @@
-"""Tests for the Observius local dashboard FastAPI app."""
+"""Tests for the Pokant local dashboard FastAPI app."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from computeruse.dashboard import create_app
 
 @pytest.fixture()
 def data_dir(tmp_path: Path) -> Path:
-    """Create a pre-populated .observius directory."""
+    """Create a pre-populated .pokant directory."""
     runs_dir = tmp_path / "runs"
     runs_dir.mkdir()
     ss_dir = tmp_path / "screenshots" / "task-001"
@@ -183,4 +183,4 @@ class TestIndex:
     def test_serves_html(self, client: TestClient) -> None:
         resp = client.get("/")
         assert resp.status_code == 200
-        assert "Observius" in resp.text
+        assert "Pokant" in resp.text

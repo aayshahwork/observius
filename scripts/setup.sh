@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "=== Observius Dev Setup ==="
+echo "=== Pokant Dev Setup ==="
 
 # Check prerequisites
 command -v docker >/dev/null 2>&1 || { echo "Docker is required. Install: https://docs.docker.com/get-docker/"; exit 1; }

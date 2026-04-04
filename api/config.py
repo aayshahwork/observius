@@ -1,4 +1,10 @@
+import logging
+import secrets
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
+
+_config_logger = logging.getLogger("pokant.config")
 
 
 class Settings(BaseSettings):
@@ -38,6 +44,23 @@ class Settings(BaseSettings):
     ENCRYPTION_MASTER_KEY: str = "change-me"
 
     model_config = {"env_file": ".env", "extra": "ignore"}
+
+    @model_validator(mode="after")
+    def _replace_insecure_defaults(self) -> "Settings":
+        """Auto-generate secure keys in dev so first-time setup doesn't break."""
+        if self.API_SECRET_KEY == "change-me":
+            self.API_SECRET_KEY = secrets.token_urlsafe(32)
+            _config_logger.warning(
+                "API_SECRET_KEY was 'change-me' — generated a random key for this session. "
+                "Set a permanent value in .env for production."
+            )
+        if self.ENCRYPTION_MASTER_KEY == "change-me":
+            self.ENCRYPTION_MASTER_KEY = secrets.token_hex(32)
+            _config_logger.warning(
+                "ENCRYPTION_MASTER_KEY was 'change-me' — generated a random key for this session. "
+                "Set a permanent 64-char hex value in .env for production."
+            )
+        return self
 
 
 settings = Settings()

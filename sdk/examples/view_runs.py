@@ -1,14 +1,14 @@
 """
-Read .observius/runs/*.json and print a summary table.
+Read .pokant/runs/*.json and print a summary table.
 
 Shows how to programmatically access run metadata without the
 dashboard or CLI. Useful for CI pipelines or custom reporting.
 
 Prerequisites:
-    pip install observius
+    pip install pokant
 
 Expected output (after running some tasks):
-    Found 3 runs in .observius/runs/
+    Found 3 runs in .pokant/runs/
 
     ID         Status     Steps  Cost     Duration
     a1b2c3d4   completed  8      $0.0234  12.3s
@@ -24,7 +24,7 @@ from pathlib import Path
 
 
 def main() -> None:
-    runs_dir = Path(".observius/runs")
+    runs_dir = Path(".pokant/runs")
 
     if not runs_dir.is_dir():
         print("No runs found. Run a task first to generate data.")

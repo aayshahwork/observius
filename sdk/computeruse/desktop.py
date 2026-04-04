@@ -1,4 +1,4 @@
-"""Desktop screenshot helpers for ObserviusTracker.
+"""Desktop screenshot helpers for PokantTracker.
 
 Convenience factory functions that return zero-arg callables suitable for
 the ``screenshot_fn`` parameter of :class:`~computeruse.tracker.TrackerConfig`.
@@ -8,10 +8,10 @@ lazily inside the returned closure, so they remain optional dependencies.
 
 Usage::
 
-    from computeruse import ObserviusTracker
+    from computeruse import PokantTracker
     from computeruse.desktop import pyautogui_screenshot_fn
 
-    tracker = ObserviusTracker(
+    tracker = PokantTracker(
         screenshot_fn=pyautogui_screenshot_fn(),
         task_description="SAP invoice processing",
     )

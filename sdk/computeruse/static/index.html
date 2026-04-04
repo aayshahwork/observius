@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Observius Dashboard</title>
+<title>Pokant Dashboard</title>
 <style>
 :root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#c9d1d9;--dim:#8b949e;
 --green:#3fb950;--red:#f85149;--yellow:#d29922;--blue:#58a6ff;--cyan:#39d2c0;--purple:#bc8cff}
@@ -48,11 +48,33 @@ tr.row:hover{background:var(--surface);cursor:pointer}
 .bar-chart .bar-fill{height:100%;border-radius:4px;transition:width .3s}
 .bar-chart .bar-count{width:40px;font-size:12px;color:var(--dim)}
 .empty{text-align:center;padding:48px;color:var(--dim)}
+.retry-timeline{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:20px}
+.retry-timeline h3{margin:0 0 12px 0;font-size:14px;color:var(--text)}
+.attempts-row{display:flex;align-items:stretch;gap:8px;overflow-x:auto;padding-bottom:4px}
+.attempt-card{flex:0 0 220px;border:1px solid var(--border);border-radius:6px;padding:12px;font-size:12px;background:var(--bg)}
+.attempt-card.success{border-color:var(--green);background:rgba(63,185,80,0.06)}
+.attempt-card.failed{border-color:var(--red);background:rgba(248,81,73,0.06)}
+.attempt-header{display:flex;justify-content:space-between;margin-bottom:8px;font-weight:bold}
+.attempt-status{font-size:16px}
+.diagnosis-category{display:inline-block;background:var(--surface);padding:2px 8px;border-radius:4px;font-size:11px;margin-bottom:4px;border:1px solid var(--border)}
+.diagnosis-cause{margin:4px 0;color:var(--dim)}
+.diagnosis-method{font-size:10px;color:var(--dim);margin-top:2px}
+.retry-hint{margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
+.diagnosis-cost{margin-top:6px;font-size:10px;color:var(--dim)}
+.env-changes{margin-top:6px;display:flex;flex-wrap:wrap;gap:4px}
+.env-tag{display:inline-block;background:var(--surface);padding:1px 6px;border-radius:3px;font-size:10px;border:1px solid var(--border)}
+.system-msg-hint{font-size:10px;color:var(--dim);margin-top:4px}
+.attempt-arrow{display:flex;align-items:center;font-size:20px;color:var(--dim)}
+.retry-summary{margin-top:12px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;color:var(--dim)}
+.no-diagnosis{color:var(--green);margin-top:8px}
+.retry-stats .mini-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:8px 0 12px}
+.retry-stats .mini-val{font-size:20px;font-weight:600}
+.retry-stats .mini-label{font-size:12px;color:var(--dim)}
 </style>
 </head>
 <body>
 <div class="header">
-  <h1>Observius</h1>
+  <h1>Pokant</h1>
   <div class="tabs">
     <div class="tab" data-tab="runs" onclick="navigate('#/')">Runs</div>
     <div class="tab" data-tab="workflows" onclick="navigate('#/workflows')">Workflows</div>
@@ -95,6 +117,57 @@ function renderRuns() {
       <td class="mono">${r.error_category || '-'}</td>
       <td class="mono">${fmtTime(r.created_at)}</td>
     </tr>`).join('')}</tbody></table>`;
+}
+
+function renderRetryTimeline(run) {
+  if (!run.attempts || (run.total_attempts || 1) <= 1) return '';
+  const attempts = run.attempts;
+  const diagCost = attempts.reduce((s, a) => s + ((a.diagnosis && a.diagnosis.analysis_cost_cents) || 0), 0);
+  const saved = Math.max(0, (run.total_attempts || 1) - 2);
+  return `<div class="retry-timeline"><h3>Retry Intelligence (${run.total_attempts} attempts)</h3>
+    <div class="attempts-row">${attempts.map((a, i) => {
+      const ok = a.status === 'completed';
+      const d = a.diagnosis;
+      const p = a.recovery_plan;
+      return `<div class="attempt-card ${ok ? 'success' : 'failed'}">
+        <div class="attempt-header"><span>Attempt ${a.attempt}</span><span class="attempt-status">${ok ? '\u2713' : '\u2717'}</span></div>
+        ${d ? `<div class="diagnosis-category">${d.category}${d.subcategory ? ' / ' + d.subcategory : ''}</div>
+          <div class="diagnosis-cause">${d.root_cause || ''}</div>
+          <div class="diagnosis-method">${d.analysis_method === 'llm_haiku' ? '\ud83e\udd16 AI diagnosed' : '\ud83d\udccf Rule matched'}</div>
+          <div class="retry-hint"><strong>Strategy:</strong> ${d.retry_hint || ''}</div>
+          ${p && (p.fresh_browser || p.stealth_mode || p.clear_cookies || p.increase_timeout || p.reduce_max_actions) ? `<div class="env-changes">
+            ${p.fresh_browser ? '<span class="env-tag">\ud83d\udd04 fresh browser</span>' : ''}
+            ${p.stealth_mode ? '<span class="env-tag">\ud83d\udd75\ufe0f stealth</span>' : ''}
+            ${p.clear_cookies ? '<span class="env-tag">\ud83c\udf6a clear cookies</span>' : ''}
+            ${p.increase_timeout ? '<span class="env-tag">\u23f1\ufe0f longer timeout</span>' : ''}
+            ${p.reduce_max_actions ? '<span class="env-tag">\ud83c\udfaf deliberate mode</span>' : ''}
+          </div>` : ''}
+          ${p && p.extend_system_message ? '<div class="system-msg-hint">\ud83d\udccb System prompt modified</div>' : ''}
+          <div class="diagnosis-cost">\ud83d\udcb0 $${((d.analysis_cost_cents || 0) / 100).toFixed(4)}</div>`
+        : ok ? '<div class="no-diagnosis">Succeeded</div>' : ''}
+      </div>${i < attempts.length - 1 ? '<div class="attempt-arrow">\u2192</div>' : ''}`;
+    }).join('')}</div>
+    <div class="retry-summary">Diagnosis cost: $${(diagCost / 100).toFixed(4)}${saved > 0 ? ' | Est. savings: ~$' + (saved * 0.19).toFixed(2) + ' (' + saved + ' prevented blind retries)' : ''}</div></div>`;
+}
+
+function renderRetryStatsSection(stats) {
+  const rs = stats.adaptive_retry_stats;
+  if (!rs || rs.runs_retried === 0) return '';
+  const cats = rs.category_counts || {};
+  const maxC = Math.max(1, ...Object.values(cats));
+  const catColors = {'element_interaction':'var(--yellow)','navigation':'var(--purple)','anti_bot':'var(--red)','authentication':'var(--red)','content_mismatch':'var(--cyan)','agent_loop':'var(--yellow)','agent_reasoning':'var(--blue)','infrastructure':'var(--red)','unknown':'var(--dim)'};
+  return `<div class="card retry-stats"><h3>Retry Intelligence</h3>
+    <div class="mini-grid">
+      <div><div class="mini-val">${rs.runs_retried}</div><div class="mini-label">Runs retried</div></div>
+      <div><div class="mini-val">${rs.avg_attempts}</div><div class="mini-label">Avg attempts</div></div>
+      <div><div class="mini-val">$${(rs.total_diagnosis_cost_cents / 100).toFixed(4)}</div><div class="mini-label">Diagnosis cost</div></div>
+    </div>
+    ${Object.keys(cats).length ? `<div class="bar-chart">
+      ${Object.entries(cats).map(([k,v]) => `<div class="bar-row">
+        <div class="bar-label">${k.replace(/_/g,' ')}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${(v/maxC*100).toFixed(0)}%;background:${catColors[k]||'var(--blue)'}"></div></div>
+        <div class="bar-count">${v}</div></div>`).join('')}
+    </div>` : ''}</div>`;
 }
 
 function renderDetail(id) {
@@ -146,6 +219,7 @@ function renderDetail(id) {
         <div>Steps: ${run.step_count || 0} &middot; Duration: ${fmtDuration(run.duration_ms || 0)} &middot; Cost: ${fmtCost(run.cost_cents || 0)}</div>
         <div class="mono" style="margin-top:4px">${fmtTime(run.created_at)}${run.error ? ' &middot; Error: ' + run.error : ''}</div></div>
     </div>
+    ${renderRetryTimeline(run)}
     ${steps.length ? `<div class="timeline">${steps.map((s, i) =>
       `<div class="seg ${s.success !== false ? 'ok' : 'err'}${i === 0 ? ' active' : ''}" onclick="window._goStep(${i})" title="Step ${i+1}: ${s.action_type || ''}"></div>`
     ).join('')}</div>` : ''}
@@ -226,7 +300,8 @@ function renderStats() {
           <div class="bar-label">${k}</div>
           <div class="bar-track"><div class="bar-fill" style="width:${(v/maxCat*100).toFixed(0)}%;background:${colors[k]||'var(--blue)'}"></div></div>
           <div class="bar-count">${v}</div></div>`).join('')}
-      </div></div>` : ''}`;
+      </div></div>` : ''}
+      ${renderRetryStatsSection(stats)}`;
   });
 }
 

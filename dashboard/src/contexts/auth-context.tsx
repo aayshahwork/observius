@@ -11,6 +11,7 @@ import {
 // MVP: raw API key in localStorage. XSS-vulnerable.
 // Swap to httpOnly cookie via BFF in production.
 const STORAGE_KEY = "computeruse_api_key";
+const DEFAULT_API_KEY = "cu_test_testkey1234567890abcdef12";
 
 interface AuthState {
   apiKey: string | null;
@@ -26,7 +27,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(STORAGE_KEY) || DEFAULT_API_KEY;
     setApiKey(stored);
     setIsLoading(false);
   }, []);

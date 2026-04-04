@@ -1,6 +1,6 @@
-# Connect Any Agent to Observius
+# Connect Any Agent to Pokant
 
-Any agent in any language can push results to Observius with a single HTTP POST to the ingest endpoint. No SDK required — just JSON over HTTP.
+Any agent in any language can push results to Pokant with a single HTTP POST to the ingest endpoint. No SDK required — just JSON over HTTP.
 
 ## Quick Start
 
@@ -49,7 +49,7 @@ All requests require an API key in the `X-API-Key` header:
 X-API-Key: cu_your_api_key_here
 ```
 
-Get your API key from the Observius dashboard at **Settings > API Keys**, or use the test key for local development:
+Get your API key from the Pokant dashboard at **Settings > API Keys**, or use the test key for local development:
 
 ```
 cu_test_testkey1234567890abcdef12
@@ -184,7 +184,7 @@ For failed tasks, set `status` to `"failed"` and provide error details:
 
 ## Viewing Results
 
-After ingesting a task, view it in the Observius dashboard:
+After ingesting a task, view it in the Pokant dashboard:
 
 ```
 http://localhost:3000/tasks
@@ -207,9 +207,9 @@ curl http://localhost:8000/api/v1/tasks/{task_id}/steps -H "X-API-Key: ..."
 
 | Language | Example |
 |----------|---------|
-| Python | Use the native `ObserviusTracker` — see [SDK README](../README.md) |
-| TypeScript | [`examples/typescript/observius-reporter.ts`](../examples/typescript/observius-reporter.ts) |
-| TypeScript + Stagehand | [`examples/typescript/stagehand-with-observius.ts`](../examples/typescript/stagehand-with-observius.ts) |
+| Python | Use the native `PokantTracker` — see [SDK README](../README.md) |
+| TypeScript | [`examples/typescript/pokant-reporter.ts`](../examples/typescript/pokant-reporter.ts) |
+| TypeScript + Stagehand | [`examples/typescript/stagehand-with-pokant.ts`](../examples/typescript/stagehand-with-pokant.ts) |
 | Go | [`examples/go/reporter.go`](../examples/go/reporter.go) |
 | curl / shell | [`examples/curl/ingest-example.sh`](../examples/curl/ingest-example.sh) |
 

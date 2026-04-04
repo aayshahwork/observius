@@ -75,6 +75,8 @@ def _task_to_response(task: Task) -> TaskResponse:
         total_tokens_out=task.total_tokens_out or 0,
         executor_mode=task.executor_mode or "browser_use",
         analysis=task.analysis_json,
+        compiled_workflow=task.compiled_workflow_json,
+        playwright_script=task.playwright_script,
     )
 
 
@@ -270,10 +272,11 @@ async def ingest_task(
         try:
             task_id = uuid.UUID(body.task_id)
         except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail={"error_code": "INVALID_INPUT", "message": "task_id must be a valid UUID."},
-            )
+            # Accept human-readable names — generate a UUID and keep the original
+            original_name = body.task_id
+            task_id = uuid.uuid4()
+            if original_name not in (body.task_description or ""):
+                body.task_description = f"[{original_name}] {body.task_description or ''}".strip()
     else:
         task_id = uuid.uuid4()
 
@@ -316,6 +319,7 @@ async def ingest_task(
         completed_at=completed_at,
         analysis_json=body.analysis,
         result=body.result,
+        compiled_workflow_json=body.compiled_workflow,
     )
     db.add(task)
 
@@ -373,6 +377,50 @@ async def ingest_task(
 
     logger.info("task_ingested", task_id=str(task_id), account_id=str(account.id), steps=len(body.steps))
     return _task_to_response(task)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/tasks/scripts
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/scripts",
+    responses={401: {"model": ErrorResponse}},
+)
+async def list_scripts(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    account: Account = Depends(get_current_account),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """List tasks that have a saved Playwright script."""
+    base = select(Task).where(
+        Task.account_id == account.id,
+        Task.playwright_script.isnot(None),
+    )
+
+    count_stmt = select(func.count()).select_from(base.subquery())
+    total = (await db.execute(count_stmt)).scalar() or 0
+
+    stmt = base.order_by(Task.created_at.desc()).offset(offset).limit(limit)
+    result = await db.execute(stmt)
+    tasks = result.scalars().all()
+
+    return {
+        "scripts": [
+            {
+                "task_id": str(t.id),
+                "task_description": t.task_description,
+                "url": t.url,
+                "status": t.status,
+                "created_at": t.created_at.isoformat() if t.created_at else None,
+                "playwright_script": t.playwright_script,
+            }
+            for t in tasks
+        ],
+        "total": total,
+        "has_more": (offset + limit) < total,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -689,3 +737,44 @@ async def get_replay(
         )
 
     return {"task_id": str(task_id), "replay_url": signed_url}
+
+
+# ---------------------------------------------------------------------------
+# PUT /api/v1/tasks/{task_id}/playwright-script
+# ---------------------------------------------------------------------------
+
+@router.put(
+    "/{task_id}/playwright-script",
+    responses={404: {"model": ErrorResponse}},
+)
+async def save_playwright_script(
+    task_id: uuid.UUID,
+    body: dict,
+    account: Account = Depends(get_current_account),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Save a generated Playwright script for a task."""
+    script = body.get("script")
+    if not script or not isinstance(script, str):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error_code": "INVALID_INPUT", "message": "Field 'script' is required and must be a string."},
+        )
+
+    stmt = select(Task).where(Task.id == task_id, Task.account_id == account.id)
+    result = await db.execute(stmt)
+    task = result.scalar_one_or_none()
+
+    if task is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error_code": "NOT_FOUND", "message": "Task not found."},
+        )
+
+    task.playwright_script = script
+    await db.commit()
+
+    logger.info("playwright_script_saved", task_id=str(task_id), account_id=str(account.id))
+    return {"task_id": str(task_id), "saved": True}
+
+

@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * Playwright configuration for Observius dashboard E2E tests.
+ * Playwright configuration for Pokant dashboard E2E tests.
  *
  * Run:
  *   npx playwright test                          # headless, all files

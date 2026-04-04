@@ -80,13 +80,13 @@ class MockPage:
 class TestTrackContextManager:
     async def test_yields_tracked_page(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             assert isinstance(t, TrackedPage)
 
     async def test_tracked_methods_record_steps(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             await t.goto("https://example.com")
             await t.click("#btn")
@@ -107,7 +107,7 @@ class TestTrackContextManager:
 
     async def test_step_numbers_increment(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             await t.goto("https://example.com")
             await t.click("#btn")
@@ -117,7 +117,7 @@ class TestTrackContextManager:
 
     async def test_steps_have_timing(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             await t.click("#btn")
 
@@ -125,7 +125,7 @@ class TestTrackContextManager:
 
     async def test_steps_have_timestamps(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             await t.click("#btn")
 
@@ -133,7 +133,7 @@ class TestTrackContextManager:
 
     async def test_all_steps_marked_success(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             await t.goto("https://example.com")
             await t.click("#btn")
@@ -149,7 +149,7 @@ class TestTrackContextManager:
 class TestFillSecurity:
     async def test_fill_does_not_log_value(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             await t.fill("#password", "super-secret-123")
 
@@ -159,7 +159,7 @@ class TestFillSecurity:
 
     async def test_type_does_not_log_text(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             await t.type("#secret", "my-password")
 
@@ -176,7 +176,7 @@ class TestFillSecurity:
 class TestPassthrough:
     async def test_untracked_methods_passthrough(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             title = await t.title()
 
@@ -185,7 +185,7 @@ class TestPassthrough:
 
     async def test_passthrough_property_access(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             assert t.url == "https://example.com"
 
@@ -216,7 +216,7 @@ class TestGotoRetry:
         page = MockPage()
         page.goto = failing_goto
         config = TrackConfig(
-            output_dir=str(tmp_path / ".observius"),
+            output_dir=str(tmp_path / ".pokant"),
             max_navigation_retries=3,
         )
         async with track(page, config=config) as t:
@@ -232,7 +232,7 @@ class TestGotoRetry:
 
         page = MockPage()
         page.goto = failing_goto
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
 
         with pytest.raises(ValueError, match="invalid url format"):
             async with track(page, config=config) as t:
@@ -253,7 +253,7 @@ class TestGotoRetry:
         page = MockPage()
         page.goto = failing_goto
         config = TrackConfig(
-            output_dir=str(tmp_path / ".observius"),
+            output_dir=str(tmp_path / ".pokant"),
             retry_navigations=False,
         )
 
@@ -274,7 +274,7 @@ class TestGotoRetry:
         page = MockPage()
         page.goto = failing_goto
         config = TrackConfig(
-            output_dir=str(tmp_path / ".observius"),
+            output_dir=str(tmp_path / ".pokant"),
             max_navigation_retries=2,
         )
 
@@ -300,7 +300,7 @@ class TestErrorRecording:
 
         page = MockPage()
         page.click = failing_click
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
 
         with pytest.raises(RuntimeError):
             async with track(page, config=config) as t:
@@ -319,7 +319,7 @@ class TestErrorRecording:
 class TestScreenshots:
     async def test_screenshots_captured(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             await t.click("#btn")
 
@@ -328,7 +328,7 @@ class TestScreenshots:
     async def test_screenshots_disabled(self, tmp_path):
         page = MockPage()
         config = TrackConfig(
-            output_dir=str(tmp_path / ".observius"),
+            output_dir=str(tmp_path / ".pokant"),
             capture_screenshots=False,
         )
         async with track(page, config=config) as t:
@@ -342,7 +342,7 @@ class TestScreenshots:
 
         page = MockPage()
         page.screenshot = failing_screenshot
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             await t.click("#btn")
 
@@ -352,14 +352,14 @@ class TestScreenshots:
     async def test_screenshots_saved_to_disk(self, tmp_path):
         page = MockPage()
         config = TrackConfig(
-            output_dir=str(tmp_path / ".observius"),
+            output_dir=str(tmp_path / ".pokant"),
             task_id="test-run",
         )
         async with track(page, config=config) as t:
             await t.click("#btn")
             await t.click("#btn2")
 
-        screenshot_dir = tmp_path / ".observius" / "screenshots" / "test-run"
+        screenshot_dir = tmp_path / ".pokant" / "screenshots" / "test-run"
         assert (screenshot_dir / "step_001.jpg").exists()
         assert (screenshot_dir / "step_002.jpg").exists()
         assert (screenshot_dir / "step_001.jpg").read_bytes() == b"fake-jpeg-bytes"
@@ -374,13 +374,13 @@ class TestOutputSaving:
     async def test_run_metadata_saved(self, tmp_path):
         page = MockPage()
         config = TrackConfig(
-            output_dir=str(tmp_path / ".observius"),
+            output_dir=str(tmp_path / ".pokant"),
             task_id="test-run",
         )
         async with track(page, config=config) as t:
             await t.click("#btn")
 
-        metadata_path = tmp_path / ".observius" / "runs" / "test-run.json"
+        metadata_path = tmp_path / ".pokant" / "runs" / "test-run.json"
         assert metadata_path.exists()
         metadata = json.loads(metadata_path.read_text())
         assert metadata["task_id"] == "test-run"
@@ -394,7 +394,7 @@ class TestOutputSaving:
         page = MockPage()
         page.click = failing_click
         config = TrackConfig(
-            output_dir=str(tmp_path / ".observius"),
+            output_dir=str(tmp_path / ".pokant"),
             task_id="fail-run",
         )
 
@@ -402,14 +402,14 @@ class TestOutputSaving:
             async with track(page, config=config) as t:
                 await t.click("#btn")
 
-        metadata_path = tmp_path / ".observius" / "runs" / "fail-run.json"
+        metadata_path = tmp_path / ".pokant" / "runs" / "fail-run.json"
         metadata = json.loads(metadata_path.read_text())
         assert metadata["success"] is False
 
     async def test_save_replay_creates_html(self, tmp_path):
         page = MockPage()
         config = TrackConfig(
-            output_dir=str(tmp_path / ".observius"),
+            output_dir=str(tmp_path / ".pokant"),
             task_id="test-run",
         )
         async with track(page, config=config) as t:
@@ -423,7 +423,7 @@ class TestOutputSaving:
     async def test_save_replay_default_path(self, tmp_path):
         page = MockPage()
         config = TrackConfig(
-            output_dir=str(tmp_path / ".observius"),
+            output_dir=str(tmp_path / ".pokant"),
             task_id="test-run",
         )
         async with track(page, config=config) as t:
@@ -440,7 +440,7 @@ class TestOutputSaving:
         page = MockPage()
         page.click = failing_click
         config = TrackConfig(
-            output_dir=str(tmp_path / ".observius"),
+            output_dir=str(tmp_path / ".pokant"),
             task_id="crash-run",
         )
 
@@ -449,7 +449,7 @@ class TestOutputSaving:
                 await t.click("#btn")
 
         # Metadata and screenshots should still be saved
-        assert (tmp_path / ".observius" / "runs" / "crash-run.json").exists()
+        assert (tmp_path / ".pokant" / "runs" / "crash-run.json").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -463,7 +463,7 @@ class TestTrackConfig:
         async with track(
             page,
             capture_screenshots=False,
-            output_dir=str(tmp_path / ".observius"),
+            output_dir=str(tmp_path / ".pokant"),
             task_id="custom-id",
         ) as t:
             await t.click("#btn")
@@ -473,7 +473,7 @@ class TestTrackConfig:
 
     async def test_default_config(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             pass
 
@@ -496,7 +496,7 @@ class TestReturnValues:
 
         page = MockPage()
         page.goto = goto_with_response
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             result = await t.goto("https://example.com")
 
@@ -508,7 +508,7 @@ class TestReturnValues:
 
         page = MockPage()
         page.click = click_returning
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             result = await t.click("#btn")
 
@@ -516,7 +516,7 @@ class TestReturnValues:
 
     async def test_select_option_forwards_return_value(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             result = await t.select_option("#dropdown")
 
@@ -530,7 +530,7 @@ class TestReturnValues:
 
         page = MockPage()
         page.wait_for_selector = wait_returning
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             result = await t.wait_for_selector("#el")
 
@@ -552,7 +552,7 @@ class TestKwargsForwarding:
 
         page = MockPage()
         page.goto = capturing_goto
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             await t.goto("https://example.com", wait_until="networkidle", timeout=5000)
 
@@ -567,7 +567,7 @@ class TestKwargsForwarding:
 
         page = MockPage()
         page.click = capturing_click
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             await t.click("#btn", force=True, position={"x": 10, "y": 20})
 
@@ -584,7 +584,7 @@ class TestKwargsForwarding:
 
         page = MockPage()
         page.fill = capturing_fill
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             await t.fill("#input", "hello", force=True)
 
@@ -601,7 +601,7 @@ class TestKwargsForwarding:
 class TestStepsDefensiveCopy:
     async def test_steps_returns_copy(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             await t.click("#btn")
 
@@ -612,7 +612,7 @@ class TestStepsDefensiveCopy:
 
     async def test_mutating_returned_steps_does_not_affect_internal(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             await t.click("#a")
             await t.click("#b")
@@ -630,7 +630,7 @@ class TestStepsDefensiveCopy:
 class TestGenerateReplay:
     async def test_returns_html_string(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             await t.click("#btn")
 
@@ -640,7 +640,7 @@ class TestGenerateReplay:
 
     async def test_contains_replay_data(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             await t.click("#btn")
 
@@ -651,7 +651,7 @@ class TestGenerateReplay:
 
     async def test_replay_with_no_steps(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             pass
 
@@ -668,13 +668,13 @@ class TestNoSteps:
     async def test_metadata_saved_with_zero_steps(self, tmp_path):
         page = MockPage()
         config = TrackConfig(
-            output_dir=str(tmp_path / ".observius"),
+            output_dir=str(tmp_path / ".pokant"),
             task_id="empty-run",
         )
         async with track(page, config=config) as t:
             pass
 
-        metadata_path = tmp_path / ".observius" / "runs" / "empty-run.json"
+        metadata_path = tmp_path / ".pokant" / "runs" / "empty-run.json"
         assert metadata_path.exists()
         metadata = json.loads(metadata_path.read_text())
         assert metadata["steps_count"] == 0
@@ -684,19 +684,19 @@ class TestNoSteps:
     async def test_no_screenshot_dir_created_without_steps(self, tmp_path):
         page = MockPage()
         config = TrackConfig(
-            output_dir=str(tmp_path / ".observius"),
+            output_dir=str(tmp_path / ".pokant"),
             task_id="empty-run",
         )
         async with track(page, config=config) as t:
             pass
 
-        screenshot_dir = tmp_path / ".observius" / "screenshots" / "empty-run"
+        screenshot_dir = tmp_path / ".pokant" / "screenshots" / "empty-run"
         assert not screenshot_dir.exists()
 
     async def test_save_replay_with_no_steps(self, tmp_path):
         page = MockPage()
         config = TrackConfig(
-            output_dir=str(tmp_path / ".observius"),
+            output_dir=str(tmp_path / ".pokant"),
             task_id="empty-run",
         )
         async with track(page, config=config) as t:
@@ -730,7 +730,7 @@ class TestGotoRetryEdgeCases:
         page = MockPage()
         page.goto = failing_goto
         config = TrackConfig(
-            output_dir=str(tmp_path / ".observius"),
+            output_dir=str(tmp_path / ".pokant"),
             max_navigation_retries=0,
         )
 
@@ -754,7 +754,7 @@ class TestGotoRetryEdgeCases:
         page = MockPage()
         page.goto = failing_goto
         config = TrackConfig(
-            output_dir=str(tmp_path / ".observius"),
+            output_dir=str(tmp_path / ".pokant"),
             max_navigation_retries=3,
         )
         async with track(page, config=config) as t:
@@ -777,7 +777,7 @@ class TestGotoRetryEdgeCases:
         page = MockPage()
         page.goto = failing_goto
         config = TrackConfig(
-            output_dir=str(tmp_path / ".observius"),
+            output_dir=str(tmp_path / ".pokant"),
             max_navigation_retries=3,
         )
 
@@ -813,7 +813,7 @@ class TestGotoRetryEdgeCases:
         page = MockPage()
         page.goto = failing_goto
         config = TrackConfig(
-            output_dir=str(tmp_path / ".observius"),
+            output_dir=str(tmp_path / ".pokant"),
             max_navigation_retries=3,
         )
         try:
@@ -840,7 +840,7 @@ class TestMultipleErrors:
 
         page = MockPage()
         page.click = selective_click
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
 
         with pytest.raises(RuntimeError, match="failed on #a"):
             async with track(page, config=config) as t:
@@ -860,7 +860,7 @@ class TestMultipleErrors:
 
         page = MockPage()
         page.click = flaky_click
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
 
         with pytest.raises(RuntimeError):
             async with track(page, config=config) as t:
@@ -884,7 +884,7 @@ class TestMultipleErrors:
         page = MockPage()
         page.click = flaky_click
         config = TrackConfig(
-            output_dir=str(tmp_path / ".observius"),
+            output_dir=str(tmp_path / ".pokant"),
             task_id="mixed-run",
         )
 
@@ -894,7 +894,7 @@ class TestMultipleErrors:
                 await t.click("#fail")
 
         metadata = json.loads(
-            (tmp_path / ".observius" / "runs" / "mixed-run.json").read_text()
+            (tmp_path / ".pokant" / "runs" / "mixed-run.json").read_text()
         )
         assert metadata["success"] is False
         assert metadata["steps_count"] == 2
@@ -911,7 +911,7 @@ class TestMultipleErrors:
 class TestSpecialCharacters:
     async def test_selector_with_brackets_and_quotes(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             await t.click('div[data-id="foo-bar"]')
 
@@ -919,7 +919,7 @@ class TestSpecialCharacters:
 
     async def test_url_with_query_params(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             await t.goto("https://example.com/search?q=hello+world&page=2")
 
@@ -927,7 +927,7 @@ class TestSpecialCharacters:
 
     async def test_unicode_selector(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             await t.click("#\u65e5\u672c\u8a9e")  # Japanese characters
 
@@ -935,7 +935,7 @@ class TestSpecialCharacters:
 
     async def test_press_description_includes_key(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             await t.press("#input", "Control+A")
 
@@ -969,7 +969,7 @@ class TestTrackConfigFrozen:
 class TestRunIdGeneration:
     async def test_auto_generated_run_id_format(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             pass
 
@@ -981,7 +981,7 @@ class TestRunIdGeneration:
     async def test_custom_task_id_used_as_run_id(self, tmp_path):
         page = MockPage()
         config = TrackConfig(
-            output_dir=str(tmp_path / ".observius"),
+            output_dir=str(tmp_path / ".pokant"),
             task_id="my-custom-id",
         )
         async with track(page, config=config) as t:
@@ -991,7 +991,7 @@ class TestRunIdGeneration:
 
     async def test_two_tracks_get_different_run_ids(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
 
         async with track(page, config=config) as t1:
             pass
@@ -1008,7 +1008,7 @@ class TestRunIdGeneration:
 
 class TestOutputDirCreation:
     async def test_deeply_nested_output_dir_created(self, tmp_path):
-        deep_dir = str(tmp_path / "a" / "b" / "c" / ".observius")
+        deep_dir = str(tmp_path / "a" / "b" / "c" / ".pokant")
         page = MockPage()
         config = TrackConfig(output_dir=deep_dir, task_id="nested-run")
         async with track(page, config=config) as t:
@@ -1027,14 +1027,14 @@ class TestMetadataStructure:
     async def test_metadata_has_all_expected_fields(self, tmp_path):
         page = MockPage()
         config = TrackConfig(
-            output_dir=str(tmp_path / ".observius"),
+            output_dir=str(tmp_path / ".pokant"),
             task_id="struct-run",
         )
         async with track(page, config=config) as t:
             await t.click("#btn")
 
         metadata = json.loads(
-            (tmp_path / ".observius" / "runs" / "struct-run.json").read_text()
+            (tmp_path / ".pokant" / "runs" / "struct-run.json").read_text()
         )
         assert "task_id" in metadata
         assert "generated_at" in metadata
@@ -1048,14 +1048,14 @@ class TestMetadataStructure:
     async def test_metadata_step_entry_structure(self, tmp_path):
         page = MockPage()
         config = TrackConfig(
-            output_dir=str(tmp_path / ".observius"),
+            output_dir=str(tmp_path / ".pokant"),
             task_id="step-struct",
         )
         async with track(page, config=config) as t:
             await t.click("#btn")
 
         metadata = json.loads(
-            (tmp_path / ".observius" / "runs" / "step-struct.json").read_text()
+            (tmp_path / ".pokant" / "runs" / "step-struct.json").read_text()
         )
         step = metadata["steps"][0]
         assert step["step_number"] == 1
@@ -1072,7 +1072,7 @@ class TestMetadataStructure:
         page = MockPage()
         page.click = bad_click
         config = TrackConfig(
-            output_dir=str(tmp_path / ".observius"),
+            output_dir=str(tmp_path / ".pokant"),
             task_id="err-struct",
         )
 
@@ -1081,7 +1081,7 @@ class TestMetadataStructure:
                 await t.click("#x")
 
         metadata = json.loads(
-            (tmp_path / ".observius" / "runs" / "err-struct.json").read_text()
+            (tmp_path / ".pokant" / "runs" / "err-struct.json").read_text()
         )
         step = metadata["steps"][0]
         assert step["success"] is False
@@ -1100,7 +1100,7 @@ class TestTimingAccuracy:
 
         page = MockPage()
         page.click = slow_click
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             await t.click("#btn")
 
@@ -1120,7 +1120,7 @@ class TestScreenshotOnFailure:
 
         page = MockPage()
         page.fill = bad_fill
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
 
         with pytest.raises(RuntimeError):
             async with track(page, config=config) as t:
@@ -1141,7 +1141,7 @@ class TestScreenshotOnFailure:
         page = MockPage()
         page.goto = always_fail_goto
         config = TrackConfig(
-            output_dir=str(tmp_path / ".observius"),
+            output_dir=str(tmp_path / ".pokant"),
             max_navigation_retries=1,
         )
 
@@ -1161,18 +1161,18 @@ class TestValueSecurityInOutputs:
     async def test_fill_value_not_in_metadata_json(self, tmp_path):
         page = MockPage()
         config = TrackConfig(
-            output_dir=str(tmp_path / ".observius"),
+            output_dir=str(tmp_path / ".pokant"),
             task_id="sec-run",
         )
         async with track(page, config=config) as t:
             await t.fill("#pw", "hunter2")
 
-        raw = (tmp_path / ".observius" / "runs" / "sec-run.json").read_text()
+        raw = (tmp_path / ".pokant" / "runs" / "sec-run.json").read_text()
         assert "hunter2" not in raw
 
     async def test_type_value_not_in_replay_html(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             await t.type("#secret", "p@ssw0rd!")
 
@@ -1190,14 +1190,14 @@ class TestSequentialTracks:
         page = MockPage()
 
         config1 = TrackConfig(
-            output_dir=str(tmp_path / ".observius"),
+            output_dir=str(tmp_path / ".pokant"),
             task_id="run-1",
         )
         async with track(page, config=config1) as t1:
             await t1.click("#a")
 
         config2 = TrackConfig(
-            output_dir=str(tmp_path / ".observius"),
+            output_dir=str(tmp_path / ".pokant"),
             task_id="run-2",
         )
         async with track(page, config=config2) as t2:
@@ -1210,8 +1210,8 @@ class TestSequentialTracks:
         assert t2.steps[0].step_number == 1  # resets per track
 
         # Both have separate metadata files
-        assert (tmp_path / ".observius" / "runs" / "run-1.json").exists()
-        assert (tmp_path / ".observius" / "runs" / "run-2.json").exists()
+        assert (tmp_path / ".pokant" / "runs" / "run-1.json").exists()
+        assert (tmp_path / ".pokant" / "runs" / "run-2.json").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -1228,7 +1228,7 @@ class TestApiReporting:
             "computeruse._reporting.report_to_api", return_value=True
         ) as mock_report:
             config = TrackConfig(
-                output_dir=str(tmp_path / ".observius"),
+                output_dir=str(tmp_path / ".pokant"),
                 api_url="http://localhost:3000",
                 api_key="test-key",
                 task_id="report-ok",
@@ -1253,7 +1253,7 @@ class TestApiReporting:
             "computeruse._reporting.report_to_api", return_value=True
         ) as mock_report:
             config = TrackConfig(
-                output_dir=str(tmp_path / ".observius"),
+                output_dir=str(tmp_path / ".pokant"),
                 api_url="http://localhost:3000",
                 api_key="test-key",
             )
@@ -1271,7 +1271,7 @@ class TestApiReporting:
             "computeruse._reporting.report_to_api"
         ) as mock_report:
             config = TrackConfig(
-                output_dir=str(tmp_path / ".observius"),
+                output_dir=str(tmp_path / ".pokant"),
             )
             async with track(page, config=config) as t:
                 await t.click("#btn")
@@ -1284,7 +1284,7 @@ class TestApiReporting:
             "computeruse._reporting.report_to_api", return_value=False
         ):
             config = TrackConfig(
-                output_dir=str(tmp_path / ".observius"),
+                output_dir=str(tmp_path / ".pokant"),
                 api_url="http://localhost:3000",
                 api_key="test-key",
                 task_id="report-false",
@@ -1294,7 +1294,7 @@ class TestApiReporting:
 
         # Steps and metadata should still be saved
         assert len(t.steps) == 1
-        assert (tmp_path / ".observius" / "runs" / "report-false.json").exists()
+        assert (tmp_path / ".pokant" / "runs" / "report-false.json").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -1307,7 +1307,7 @@ class TestTrackEnrichment:
 
     async def test_click_has_enrichment_fields(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             await t.click("#submit-btn")
 
@@ -1324,7 +1324,7 @@ class TestTrackEnrichment:
 
     async def test_fill_has_parameterized_template(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             await t.fill("#email", "user@example.com")
 
@@ -1333,7 +1333,7 @@ class TestTrackEnrichment:
 
     async def test_type_has_parameterized_template(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             await t.type("#phone", "555-867-5309")
 
@@ -1342,7 +1342,7 @@ class TestTrackEnrichment:
 
     async def test_goto_has_pre_post_url(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             await t.goto("https://example.com/page")
 
@@ -1352,7 +1352,7 @@ class TestTrackEnrichment:
 
     async def test_select_option_has_pre_post_url(self, tmp_path):
         page = MockPage()
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         async with track(page, config=config) as t:
             await t.select_option("#dropdown")
 
@@ -1365,7 +1365,7 @@ class TestTrackEnrichment:
         page = MockPage()
         # Remove eval_on_selector to force enrichment failure
         delattr(MockPage, "eval_on_selector")
-        config = TrackConfig(output_dir=str(tmp_path / ".observius"))
+        config = TrackConfig(output_dir=str(tmp_path / ".pokant"))
         try:
             async with track(page, config=config) as t:
                 await t.click("#btn")

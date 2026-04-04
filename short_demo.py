@@ -20,17 +20,17 @@ TARGETS = [
      "schema": {"products": "list[str]", "taglines": "list[str]"}},
 ]
 
-console.print("\n[bold cyan]🔍 Observius — Multi-Source Intelligence Pipeline[/bold cyan]")
+console.print("\n[bold cyan]🔍 Pokant — Multi-Source Intelligence Pipeline[/bold cyan]")
 console.print("[dim]Extracting structured data from 3 sources in one workflow...[/dim]\n")
 for i, t in enumerate(TARGETS, 1):
     console.print(f"  [dim]{i}.[/dim] {t['url']}")
 console.print()
 
 cu = ComputerUse(headless=False)
-if cu.observius_api_url and cu.observius_api_key:
-    console.print(f"[green]Dashboard reporting enabled[/green] → {cu.observius_api_url}\n")
+if cu.pokant_api_url and cu.pokant_api_key:
+    console.print(f"[green]Dashboard reporting enabled[/green] → {cu.pokant_api_url}\n")
 else:
-    console.print("[dim]Dashboard reporting disabled (set OBSERVIUS_API_URL and OBSERVIUS_API_KEY in .env to enable)[/dim]\n")
+    console.print("[dim]Dashboard reporting disabled (set POKANT_API_URL and POKANT_API_KEY in .env to enable)[/dim]\n")
 results, start_total = [], time.time()
 
 for i, target in enumerate(TARGETS, 1):

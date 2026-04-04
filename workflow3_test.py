@@ -1,8 +1,8 @@
-from computeruse import ObserviusTracker
+from computeruse import PokantTracker
 
 # 5 failed tasks to trigger alerts
 for i in range(5):
-    t = ObserviusTracker(
+    t = PokantTracker(
         task_description=f"Failing task #{i+1} on portal.example.com",
         api_url="http://localhost:8000",
         api_key="cu_test_testkey1234567890abcdef12",
@@ -13,7 +13,7 @@ for i in range(5):
     print(f"  Failed #{i+1}: {t.task_id}")
 
 # 1 expensive task
-exp = ObserviusTracker(
+exp = PokantTracker(
     task_description="Expensive extraction",
     api_url="http://localhost:8000",
     api_key="cu_test_testkey1234567890abcdef12",

@@ -39,7 +39,7 @@ from computeruse.replay_generator import ReplayGenerator
 from computeruse.retry_policy import MAX_DELAY_SECONDS, RETRIABLE_CATEGORIES, RetryDecision, should_retry_task
 from computeruse.stuck_detector import StuckDetector, StuckSignal
 from computeruse.track import TrackConfig, TrackedPage, track
-from computeruse.tracker import ObserviusTracker, TrackerConfig, create_tracker
+from computeruse.tracker import PokantTracker, TrackerConfig, create_tracker
 from computeruse.wrap import WrappedAgent, WrapConfig, wrap
 from computeruse.models import CompiledStep, CompiledWorkflow
 
@@ -110,6 +110,25 @@ except ImportError:
     ReplayResult = None  # type: ignore[assignment,misc]
     ReplayStepError = None  # type: ignore[assignment,misc]
 
+try:
+    from computeruse.failure_analyzer import FailureAnalyzer, FailureCategory, FailureDiagnosis
+except ImportError:
+    FailureAnalyzer = None  # type: ignore[assignment,misc]
+    FailureCategory = None  # type: ignore[assignment,misc]
+    FailureDiagnosis = None  # type: ignore[assignment,misc]
+
+try:
+    from computeruse.recovery_router import RecoveryPlan, RecoveryRouter
+except ImportError:
+    RecoveryRouter = None  # type: ignore[assignment,misc]
+    RecoveryPlan = None  # type: ignore[assignment,misc]
+
+try:
+    from computeruse.retry_memory import AttemptRecord, RetryMemory
+except ImportError:
+    RetryMemory = None  # type: ignore[assignment,misc]
+    AttemptRecord = None  # type: ignore[assignment,misc]
+
 __version__ = "0.2.0"
 
 __all__ = [
@@ -157,7 +176,7 @@ __all__ = [
     "TrackedPage",
     "TrackConfig",
     # Generic tracker
-    "ObserviusTracker",
+    "PokantTracker",
     "TrackerConfig",
     "create_tracker",
     # Wrapper
@@ -202,6 +221,14 @@ __all__ = [
     "ReplayConfig",
     "ReplayResult",
     "ReplayStepError",
+    # Adaptive retry (AR3)
+    "FailureAnalyzer",
+    "FailureCategory",
+    "FailureDiagnosis",
+    "RecoveryRouter",
+    "RecoveryPlan",
+    "RetryMemory",
+    "AttemptRecord",
     # Metadata
     "__version__",
 ]

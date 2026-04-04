@@ -8,7 +8,7 @@ Shows how to use WrapConfig to tune the reliability layer:
 - Set a custom output directory
 
 Prerequisites:
-    pip install observius browser-use langchain-anthropic
+    pip install pokant browser-use langchain-anthropic
     export ANTHROPIC_API_KEY=sk-ant-...
 
 Expected output:
@@ -21,13 +21,13 @@ Expected output:
 import asyncio
 
 from browser_use import Agent
-from langchain_anthropic import ChatAnthropic
+from browser_use.llm import ChatAnthropic
 
 from computeruse import wrap, WrapConfig
 
 
 async def main() -> None:
-    llm = ChatAnthropic(model="claude-sonnet-4-5-20250514")
+    llm = ChatAnthropic(model="claude-sonnet-4-6")
     agent = Agent(
         task="Log in and check the account balance",
         llm=llm,

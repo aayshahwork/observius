@@ -1,9 +1,9 @@
 import time
-from computeruse import ObserviusTracker
+from computeruse import PokantTracker
 from computeruse.desktop import pillow_screenshot_fn
 
 # Use Pillow (works on macOS without extra installs)
-tracker = ObserviusTracker(
+tracker = PokantTracker(
     screenshot_fn=pillow_screenshot_fn(),
     task_description="Desktop automation: capture current screen",
     api_url="http://localhost:8000",

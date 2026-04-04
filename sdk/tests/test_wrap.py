@@ -169,7 +169,7 @@ class TestWrapConfig:
         assert cfg.track_cost is True
         assert cfg.session_key is None
         assert cfg.save_screenshots is True
-        assert cfg.output_dir == ".observius"
+        assert cfg.output_dir == ".pokant"
         assert cfg.generate_replay is True
         assert cfg.task_id is None
 
@@ -224,20 +224,20 @@ class TestRunBasic:
     async def test_returns_agent_result(self) -> None:
         expected = _make_result()
         agent = MockAgent(result=expected)
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_basic")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_basic")
         result = await wrapped.run()
         assert result is expected
 
     async def test_task_id_auto_generated(self) -> None:
         agent = MockAgent(result=_make_result())
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_taskid")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_taskid")
         await wrapped.run()
         assert len(wrapped.task_id) == 36  # UUID
 
     async def test_task_id_custom(self) -> None:
         agent = MockAgent(result=_make_result())
         wrapped = wrap(
-            agent, task_id="my-task", output_dir="/tmp/observius_test_custom"
+            agent, task_id="my-task", output_dir="/tmp/pokant_test_custom"
         )
         await wrapped.run()
         assert wrapped.task_id == "my-task"
@@ -255,7 +255,8 @@ class TestRetry:
         agent = MockAgent(errors=[_make_transient_error(), None])
         agent._result = result
         wrapped = wrap(
-            agent, max_retries=3, output_dir="/tmp/observius_test_retry"
+            agent, max_retries=3, adaptive_retry=False,
+            output_dir="/tmp/pokant_test_retry",
         )
         got = await wrapped.run()
         assert got is result
@@ -265,7 +266,8 @@ class TestRetry:
         """Permanent error raises immediately without retry."""
         agent = MockAgent(error=_make_permanent_error())
         wrapped = wrap(
-            agent, max_retries=3, output_dir="/tmp/observius_test_noretry"
+            agent, max_retries=3, adaptive_retry=False,
+            output_dir="/tmp/pokant_test_noretry",
         )
         with pytest.raises(Exception, match="invalid api key"):
             await wrapped.run()
@@ -276,7 +278,8 @@ class TestRetry:
         errors = [_make_transient_error(f"fail {i}") for i in range(4)]
         agent = MockAgent(errors=errors)
         wrapped = wrap(
-            agent, max_retries=3, output_dir="/tmp/observius_test_exhaust"
+            agent, max_retries=3, adaptive_retry=False,
+            output_dir="/tmp/pokant_test_exhaust",
         )
         with pytest.raises(Exception, match="fail 3"):
             await wrapped.run()
@@ -305,7 +308,7 @@ class TestOnStepEndDetection:
 
         wrapped = wrap(
             CapturingAgent(),
-            output_dir="/tmp/observius_test_stepend",
+            output_dir="/tmp/pokant_test_stepend",
         )
         await wrapped.run()
         assert received_kwargs["on_step_end"] is not None
@@ -313,7 +316,7 @@ class TestOnStepEndDetection:
     async def test_on_step_end_not_passed_when_unsupported(self) -> None:
         """When agent.run() doesn't accept on_step_end, it's not passed."""
         agent = MockAgentNoOnStepEnd(result=_make_result())
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_nostepend")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_nostepend")
         # Should not raise TypeError about unexpected keyword
         result = await wrapped.run()
         assert result is not None
@@ -333,7 +336,7 @@ class TestOnStepEndDetection:
                 return _make_result()
 
         agent = CapturingAgent()
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_usercb")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_usercb")
         await wrapped.run(on_step_end=user_callback)
         assert agent.received_on_step_end is user_callback
 
@@ -366,7 +369,7 @@ class TestStepEnrichment:
             action_names=["ClickElementAction", "InputTextAction"],
         )
         agent = MockAgent(result=result)
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_enrich")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_enrich")
         await wrapped.run()
 
         assert len(wrapped.steps) == 2
@@ -383,7 +386,7 @@ class TestStepEnrichment:
             steps=steps, action_names=["ClickElementAction"]
         )
         agent = MockAgent(result=result)
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_enrich_err")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_enrich_err")
         await wrapped.run()
 
         assert wrapped.steps[0].success is False
@@ -399,7 +402,7 @@ class TestCostCalculation:
     async def test_cost_from_total_cost(self) -> None:
         result = _make_result(total_cost_dollars=0.05)
         agent = MockAgent(result=result)
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_cost")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_cost")
         await wrapped.run()
         assert wrapped.cost_cents == pytest.approx(5.0)
 
@@ -414,7 +417,7 @@ class TestCostCalculation:
             total_cost_dollars=None,
         )
         agent = MockAgent(result=result)
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_cost_tokens")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_cost_tokens")
         await wrapped.run()
         assert wrapped.cost_cents > 0
 
@@ -482,6 +485,7 @@ class TestRunMetadata:
             agent,
             task_id="test-fail",
             max_retries=0,
+            adaptive_retry=False,
             output_dir=str(tmp_path),
         )
         with pytest.raises(Exception):
@@ -511,7 +515,7 @@ class TestStuckDetection:
         wrapped = wrap(
             agent,
             stuck_failure_threshold=2,
-            output_dir="/tmp/observius_test_stuck",
+            output_dir="/tmp/pokant_test_stuck",
         )
         # Should complete without error (3 steps is below default thresholds)
         await wrapped.run()
@@ -523,7 +527,7 @@ class TestStuckDetection:
         wrapped = wrap(
             agent,
             enable_stuck_detection=False,
-            output_dir="/tmp/observius_test_nostuck",
+            output_dir="/tmp/pokant_test_nostuck",
         )
         assert wrapped._stuck_detector is None
         await wrapped.run()
@@ -681,7 +685,7 @@ class TestPropertiesLifecycle:
             steps=[_make_history_step()],
             action_names=["ClickElementAction"],
         ))
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_copy")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_copy")
 
         async def _run() -> None:
             await wrapped.run()
@@ -703,7 +707,8 @@ class TestRetryEdgeCases:
         """With max_retries=0, transient errors raise immediately."""
         agent = MockAgent(error=_make_transient_error())
         wrapped = wrap(
-            agent, max_retries=0, output_dir="/tmp/observius_test_zero"
+            agent, max_retries=0, adaptive_retry=False,
+            output_dir="/tmp/pokant_test_zero",
         )
         with pytest.raises(Exception, match="overloaded"):
             await wrapped.run()
@@ -718,7 +723,8 @@ class TestRetryEdgeCases:
         agent = MockAgent(errors=[_make_transient_error(), None])
         agent._result = good_result
         wrapped = wrap(
-            agent, max_retries=3, output_dir="/tmp/observius_test_reset"
+            agent, max_retries=3, adaptive_retry=False,
+            output_dir="/tmp/pokant_test_reset",
         )
         await wrapped.run()
         # Should only have steps from the successful attempt
@@ -730,7 +736,8 @@ class TestRetryEdgeCases:
         agent = MockAgent(errors=[_make_transient_error(), None])
         agent._result = good_result
         wrapped = wrap(
-            agent, max_retries=3, output_dir="/tmp/observius_test_stuck_reset"
+            agent, max_retries=3, adaptive_retry=False,
+            output_dir="/tmp/pokant_test_stuck_reset",
         )
         await wrapped.run()
         # The stuck detector should be in a clean state
@@ -743,6 +750,7 @@ class TestRetryEdgeCases:
         wrapped = wrap(
             agent,
             max_retries=0,
+            adaptive_retry=False,
             task_id="cat-test",
             output_dir=str(tmp_path),
         )
@@ -780,17 +788,21 @@ class TestRetryEdgeCases:
         agent = MockAgent(errors=[exc, None])
         agent._result = _make_result()
         wrapped = wrap(
-            agent, max_retries=3, output_dir="/tmp/observius_test_429"
+            agent, max_retries=3, adaptive_retry=False,
+            output_dir="/tmp/pokant_test_429",
         )
         result = await wrapped.run()
         assert result is not None
         assert agent._call_count == 2
 
     async def test_unknown_error_not_retried(self) -> None:
-        """A generic ValueError is classified as unknown and not retried."""
+        """A generic ValueError is classified as unknown and not retried
+        under the dumb retry policy (adaptive retry retries unknown errors).
+        """
         agent = MockAgent(error=ValueError("something broke"))
         wrapped = wrap(
-            agent, max_retries=3, output_dir="/tmp/observius_test_unknown"
+            agent, max_retries=3, adaptive_retry=False,
+            output_dir="/tmp/pokant_test_unknown",
         )
         with pytest.raises(ValueError, match="something broke"):
             await wrapped.run()
@@ -801,7 +813,8 @@ class TestRetryEdgeCases:
         agent = MockAgent(errors=[ConnectionError("refused"), None])
         agent._result = _make_result()
         wrapped = wrap(
-            agent, max_retries=3, output_dir="/tmp/observius_test_conn"
+            agent, max_retries=3, adaptive_retry=False,
+            output_dir="/tmp/pokant_test_conn",
         )
         result = await wrapped.run()
         assert result is not None
@@ -818,7 +831,7 @@ class TestOnStepEndEdgeCases:
         """Callback is resilient when agent has no history attribute."""
         wrapped = wrap(
             MockAgent(result=_make_result()),
-            output_dir="/tmp/observius_test_nohist",
+            output_dir="/tmp/pokant_test_nohist",
         )
         # Simulate calling the callback with an agent that has no history
         agent_no_history = SimpleNamespace()
@@ -828,7 +841,7 @@ class TestOnStepEndEdgeCases:
     async def test_on_step_end_handles_empty_history(self) -> None:
         wrapped = wrap(
             MockAgent(result=_make_result()),
-            output_dir="/tmp/observius_test_emptyhist",
+            output_dir="/tmp/pokant_test_emptyhist",
         )
         agent_empty = SimpleNamespace(history=[])
         await wrapped._on_step_end(agent_empty)
@@ -838,7 +851,7 @@ class TestOnStepEndEdgeCases:
         """If history is not a list, callback degrades gracefully."""
         wrapped = wrap(
             MockAgent(result=_make_result()),
-            output_dir="/tmp/observius_test_nonlist",
+            output_dir="/tmp/pokant_test_nonlist",
         )
         agent_str_hist = SimpleNamespace(history="not a list")
         await wrapped._on_step_end(agent_str_hist)
@@ -855,7 +868,7 @@ class TestOnStepEndEdgeCases:
 
         wrapped = wrap(
             AgentNoStop(),
-            output_dir="/tmp/observius_test_nostop",
+            output_dir="/tmp/pokant_test_nostop",
         )
         # Manually inject a stuck detector that always fires
         from computeruse.stuck_detector import StuckSignal
@@ -878,7 +891,7 @@ class TestOnStepEndEdgeCases:
         wrapped = wrap(
             MockAgent(result=_make_result()),
             enable_stuck_detection=False,
-            output_dir="/tmp/observius_test_noop",
+            output_dir="/tmp/pokant_test_noop",
         )
         agent = SimpleNamespace(history=[SimpleNamespace()])
         await wrapped._on_step_end(agent)
@@ -895,7 +908,7 @@ class TestStepEnrichmentEdgeCases:
         """Result with empty history produces zero steps."""
         result = _make_result(steps=[], action_names=[], screenshots=[])
         agent = MockAgent(result=result)
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_emptyhist2")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_emptyhist2")
         await wrapped.run()
         assert wrapped.steps == []
 
@@ -903,7 +916,7 @@ class TestStepEnrichmentEdgeCases:
         """Result missing .history entirely — enrichment degrades."""
         result = SimpleNamespace()  # no history, no screenshots, etc.
         agent = MockAgent(result=result)
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_nohist2")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_nohist2")
         await wrapped.run()
         assert wrapped.steps == []
 
@@ -914,7 +927,7 @@ class TestStepEnrichmentEdgeCases:
             steps=steps, action_names=["ClickElementAction"]
         )
         agent = MockAgent(result=result)
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_short_names")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_short_names")
         await wrapped.run()
         assert len(wrapped.steps) == 2
         assert wrapped.steps[0].action_type == "click"
@@ -930,7 +943,7 @@ class TestStepEnrichmentEdgeCases:
             screenshots=[png],
         )
         agent = MockAgent(result=result)
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_short_ss")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_short_ss")
         await wrapped.run()
         assert wrapped.steps[0].screenshot_bytes == png
         assert wrapped.steps[1].screenshot_bytes is None
@@ -948,7 +961,7 @@ class TestStepEnrichmentEdgeCases:
             action_names=lambda: ["ClickElementAction"],
         )
         agent = MockAgent(result=result)
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_bad_ss")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_bad_ss")
         await wrapped.run()
         assert len(wrapped.steps) == 1
 
@@ -965,7 +978,7 @@ class TestStepEnrichmentEdgeCases:
             action_names=_bad_names,
         )
         agent = MockAgent(result=result)
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_bad_names")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_bad_names")
         await wrapped.run()
         assert len(wrapped.steps) == 1
         assert wrapped.steps[0].action_type == "unknown"
@@ -983,7 +996,7 @@ class TestStepEnrichmentEdgeCases:
             steps=[step], action_names=["ClickElementAction"]
         )
         agent = MockAgent(result=result)
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_no_mo")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_no_mo")
         await wrapped.run()
         assert wrapped.steps[0].description == ""  # default
 
@@ -1000,7 +1013,7 @@ class TestStepEnrichmentEdgeCases:
             steps=[step], action_names=["ClickElementAction"]
         )
         agent = MockAgent(result=result)
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_no_meta")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_no_meta")
         await wrapped.run()
         assert wrapped.steps[0].tokens_in == 0
         assert wrapped.steps[0].tokens_out == 0
@@ -1015,7 +1028,7 @@ class TestStepEnrichmentEdgeCases:
         )
         result = _make_result(steps=[step], action_names=["ClickElementAction"])
         agent = MockAgent(result=result)
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_result_str")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_result_str")
         await wrapped.run()
         assert wrapped.steps[0].success is True  # default
 
@@ -1031,7 +1044,7 @@ class TestStepEnrichmentEdgeCases:
         )
         result = _make_result(steps=[step], action_names=["ClickElementAction"])
         agent = MockAgent(result=result)
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_trunc_err")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_trunc_err")
         await wrapped.run()
         assert wrapped.steps[0].success is False
         assert "err0" in wrapped.steps[0].error
@@ -1049,7 +1062,7 @@ class TestStepEnrichmentEdgeCases:
         )
         result = _make_result(steps=[step], action_names=["ClickElementAction"])
         agent = MockAgent(result=result)
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_eval")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_eval")
         await wrapped.run()
         desc = wrapped.steps[0].description
         assert "Click submit" in desc
@@ -1067,7 +1080,7 @@ class TestStepEnrichmentEdgeCases:
         )
         result = _make_result(steps=[step], action_names=["ClickElementAction"])
         agent = MockAgent(result=result)
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_trunc_desc")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_trunc_desc")
         await wrapped.run()
         assert len(wrapped.steps[0].description) == 500
 
@@ -1077,7 +1090,7 @@ class TestStepEnrichmentEdgeCases:
             steps=steps, action_names=["SomeFutureAction"]
         )
         agent = MockAgent(result=result)
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_unk_action")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_unk_action")
         await wrapped.run()
         assert wrapped.steps[0].action_type == "unknown"
 
@@ -1088,7 +1101,7 @@ class TestStepEnrichmentEdgeCases:
             action_names=["ClickElementAction", "ScrollAction"],
         )
         agent = MockAgent(result=result)
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_stepnum")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_stepnum")
         await wrapped.run()
         assert wrapped.steps[0].step_number == 1
         assert wrapped.steps[1].step_number == 2
@@ -1106,7 +1119,7 @@ class TestStepEnrichmentEdgeCases:
         )
         result = _make_result(steps=[step], action_names=["ClickElementAction"])
         agent = MockAgent(result=result)
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_none_tokens")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_none_tokens")
         await wrapped.run()
         assert wrapped.steps[0].tokens_in == 0
         assert wrapped.steps[0].tokens_out == 0
@@ -1153,7 +1166,7 @@ class TestCostEdgeCases:
         result = _make_result(total_cost_dollars=None)
         agent = MockAgent(result=result)
         wrapped = wrap(
-            agent, output_dir="/tmp/observius_test_zero_cost"
+            agent, output_dir="/tmp/pokant_test_zero_cost"
         )
         await wrapped.run()
         assert wrapped.cost_cents == 0.0
@@ -1162,7 +1175,7 @@ class TestCostEdgeCases:
         result = _make_result(total_cost_dollars=0.0)
         agent = MockAgent(result=result)
         wrapped = wrap(
-            agent, output_dir="/tmp/observius_test_cost_zero"
+            agent, output_dir="/tmp/pokant_test_cost_zero"
         )
         await wrapped.run()
         assert wrapped.cost_cents == 0.0
@@ -1178,7 +1191,7 @@ class TestCostEdgeCases:
         )
         agent = MockAgent(result=result)
         wrapped = wrap(
-            agent, output_dir="/tmp/observius_test_usage_cost"
+            agent, output_dir="/tmp/pokant_test_usage_cost"
         )
         await wrapped.run()
         assert wrapped.cost_cents == pytest.approx(2.0)
@@ -1198,7 +1211,7 @@ class TestCostEdgeCases:
         )
         agent = MockAgent(result=result)
         wrapped = wrap(
-            agent, output_dir="/tmp/observius_test_cost_exc"
+            agent, output_dir="/tmp/pokant_test_cost_exc"
         )
         await wrapped.run()
         assert wrapped.cost_cents > 0
@@ -1210,7 +1223,7 @@ class TestCostEdgeCases:
         wrapped = wrap(
             agent,
             track_cost=False,
-            output_dir="/tmp/observius_test_no_cost",
+            output_dir="/tmp/pokant_test_no_cost",
         )
         await wrapped.run()
         assert wrapped.cost_cents == 0.0
@@ -1337,6 +1350,10 @@ class TestRunMetadataEdgeCases:
             "duration_ms",
             "steps",
             "analysis",
+            # AR3: adaptive retry metadata
+            "attempts",
+            "total_attempts",
+            "adaptive_retry_used",
         }
         assert set(data.keys()) == expected_keys
 
@@ -1428,6 +1445,7 @@ class TestRunMetadataEdgeCases:
         wrapped = wrap(
             agent,
             max_retries=3,
+            adaptive_retry=False,
             task_id="retry-meta",
             output_dir=str(tmp_path),
         )
@@ -1515,7 +1533,7 @@ class TestInspectSignatureEdgeCases:
             return _make_result()
 
         agent.run = custom_run  # type: ignore[attr-defined]
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_weird")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_weird")
         result = await wrapped.run()
         assert result is not None
         assert call_count == 1
@@ -1531,7 +1549,7 @@ class TestInspectSignatureEdgeCases:
 
         wrapped = wrap(
             ForwardingAgent(),
-            output_dir="/tmp/observius_test_fwd",
+            output_dir="/tmp/pokant_test_fwd",
         )
         await wrapped.run(max_steps=50, custom_param="hello")
         assert received["custom_param"] == "hello"
@@ -1550,7 +1568,7 @@ class TestInspectSignatureEdgeCases:
 
         wrapped = wrap(
             CapturingAgent(),
-            output_dir="/tmp/observius_test_maxsteps",
+            output_dir="/tmp/pokant_test_maxsteps",
         )
         await wrapped.run(max_steps=42)
         assert received_max_steps == 42
@@ -1568,7 +1586,7 @@ class TestSessionEdgeCases:
         wrapped = wrap(
             agent,
             session_key=None,
-            output_dir="/tmp/observius_test_no_sess",
+            output_dir="/tmp/pokant_test_no_sess",
         )
         await wrapped.run()
         # No error — session ops were skipped
@@ -1671,7 +1689,7 @@ class TestLargeRuns:
         result = _make_result(steps=steps, action_names=names)
         agent = MockAgent(result=result)
         wrapped = wrap(
-            agent, output_dir="/tmp/observius_test_all_actions"
+            agent, output_dir="/tmp/pokant_test_all_actions"
         )
         await wrapped.run()
 
@@ -1706,7 +1724,7 @@ class TestApiReporting:
                 agent,
                 api_url="http://localhost:3000",
                 api_key="test-key",
-                output_dir="/tmp/observius_test_report_ok",
+                output_dir="/tmp/pokant_test_report_ok",
             )
             await wrapped.run()
 
@@ -1729,7 +1747,8 @@ class TestApiReporting:
                 api_url="http://localhost:3000",
                 api_key="test-key",
                 max_retries=0,
-                output_dir="/tmp/observius_test_report_fail",
+                adaptive_retry=False,
+                output_dir="/tmp/pokant_test_report_fail",
             )
             with pytest.raises(ValueError, match="task broke"):
                 await wrapped.run()
@@ -1748,7 +1767,7 @@ class TestApiReporting:
         ) as mock_report:
             wrapped = wrap(
                 agent,
-                output_dir="/tmp/observius_test_no_report",
+                output_dir="/tmp/pokant_test_no_report",
             )
             await wrapped.run()
 
@@ -1765,7 +1784,7 @@ class TestApiReporting:
                 agent,
                 api_url="http://localhost:3000",
                 api_key="test-key",
-                output_dir="/tmp/observius_test_report_false",
+                output_dir="/tmp/pokant_test_report_false",
             )
             run_result = await wrapped.run()
 
@@ -1835,7 +1854,7 @@ class TestCostAlternateTokenPaths:
             total_cost_dollars=None,
         )
         agent = MockAgent(result=result)
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_alt_tokens")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_alt_tokens")
         await wrapped.run()
         assert wrapped.cost_cents > 0
         assert wrapped.steps[0].tokens_in == 1000
@@ -1861,7 +1880,7 @@ class TestCostAlternateTokenPaths:
             total_cost_dollars=None,
         )
         agent = MockAgent(result=result)
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_direct_tokens")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_direct_tokens")
         await wrapped.run()
         assert wrapped.cost_cents > 0
         assert wrapped.steps[0].tokens_in == 2000
@@ -1885,7 +1904,7 @@ class TestBudgetEnforcement:
     async def test_budget_exceeded_stops_agent(self) -> None:
         """When accumulated cost > max_cost_cents, agent.stop() is called."""
         agent = MockAgent(result=_make_result())
-        wrapped = wrap(agent, max_cost_cents=0.001, output_dir="/tmp/observius_test_budget")
+        wrapped = wrap(agent, max_cost_cents=0.001, output_dir="/tmp/pokant_test_budget")
 
         # Simulate a step with enough tokens to exceed the tiny budget
         expensive_step = SimpleNamespace(
@@ -1901,7 +1920,7 @@ class TestBudgetEnforcement:
     async def test_budget_not_exceeded_no_stop(self) -> None:
         """When accumulated cost < max_cost_cents, agent continues."""
         agent = MockAgent(result=_make_result())
-        wrapped = wrap(agent, max_cost_cents=100.0, output_dir="/tmp/observius_test_budget_ok")
+        wrapped = wrap(agent, max_cost_cents=100.0, output_dir="/tmp/pokant_test_budget_ok")
 
         cheap_step = SimpleNamespace(
             metadata=SimpleNamespace(input_tokens=10, output_tokens=5),
@@ -1916,7 +1935,7 @@ class TestBudgetEnforcement:
     async def test_budget_none_no_enforcement(self) -> None:
         """When max_cost_cents is None, no budget check happens."""
         agent = MockAgent(result=_make_result())
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_no_budget")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_no_budget")
 
         expensive_step = SimpleNamespace(
             metadata=SimpleNamespace(input_tokens=999999, output_tokens=999999),
@@ -1944,6 +1963,7 @@ class TestInterruptSafety:
             agent,
             task_id="test-interrupt",
             max_retries=0,
+            adaptive_retry=False,
             output_dir=str(tmp_path),
         )
         with pytest.raises(Exception):
@@ -1956,7 +1976,7 @@ class TestInterruptSafety:
 
     async def test_interrupted_flag_initially_false(self) -> None:
         agent = MockAgent(result=_make_result())
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_flag")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_flag")
         assert wrapped._interrupted is False
 
     async def test_budget_resets_on_retry(self) -> None:
@@ -1967,8 +1987,9 @@ class TestInterruptSafety:
         wrapped = wrap(
             agent,
             max_retries=3,
+            adaptive_retry=False,
             max_cost_cents=100.0,
-            output_dir="/tmp/observius_test_cost_reset",
+            output_dir="/tmp/pokant_test_cost_reset",
         )
         # Manually record cost to prove budget gets reset on retry
         wrapped._budget.record_cost_direct(50.0)
@@ -1998,7 +2019,7 @@ class TestEnrichmentSecondPass:
             action_names=["ClickElementAction"],
         )
         agent = MockAgent(result=result)
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_intent")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_intent")
         await wrapped.run()
 
         assert wrapped.steps[0].intent == "Click the login button"
@@ -2024,7 +2045,7 @@ class TestEnrichmentSecondPass:
             action_names=["ClickElementAction"],
         )
         agent = MockAgent(result=result)
-        wrapped = wrap(agent, output_dir="/tmp/observius_test_selectors")
+        wrapped = wrap(agent, output_dir="/tmp/pokant_test_selectors")
         await wrapped.run()
 
         assert wrapped.steps[0].selectors is not None

@@ -1,17 +1,17 @@
-# Observius
+# Pokant
 
 **One API to automate any browser workflow.**
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![GitHub Stars](https://img.shields.io/github/stars/aayshahwork/observius?style=social)](https://github.com/aayshahwork/observius)
+[![GitHub Stars](https://img.shields.io/github/stars/aayshahwork/pokant?style=social)](https://github.com/aayshahwork/pokant)
 
 ---
 
 ## Quick Start
 
 ```bash
-pip install "git+https://github.com/aayshahwork/observius.git#subdirectory=sdk"
+pip install "git+https://github.com/aayshahwork/pokant.git#subdirectory=sdk"
 ```
 
 Set your API key in `.env`:
@@ -52,7 +52,7 @@ print(result.result)
 
 Building a browser automation agent from scratch means stitching together at least five separate concerns: a browser driver (Playwright or Puppeteer), an LLM for navigation decisions, retry and error-recovery logic, structured output parsing and validation, and some kind of replay or observability layer. Each piece has its own failure modes. Most teams spend more time on infrastructure than on the actual task logic.
 
-Observius collapses all of that into a single `run_task()` call. You describe what you want in plain English, optionally provide an output schema, and get back validated structured data. The agent handles navigation, adapts when page layouts change, retries on transient failures, and produces a visual replay of everything it did — without you touching any of the underlying machinery.
+Pokant collapses all of that into a single `run_task()` call. You describe what you want in plain English, optionally provide an output schema, and get back validated structured data. The agent handles navigation, adapts when page layouts change, retries on transient failures, and produces a visual replay of everything it did — without you touching any of the underlying machinery.
 
 ---
 
@@ -74,13 +74,13 @@ Observius collapses all of that into a single `run_task()` call. You describe wh
 
 | Language | Integration | Example |
 |----------|-------------|---------|
-| **Python** | Native SDK (`ObserviusTracker`, `wrap()`, `track()`, `observe_stagehand()`) | [`sdk/README.md`](sdk/README.md) |
+| **Python** | Native SDK (`PokantTracker`, `wrap()`, `track()`, `observe_stagehand()`) | [`sdk/README.md`](sdk/README.md) |
 | **TypeScript / JavaScript** | Zero-dependency reporter class | [`sdk/examples/typescript/`](sdk/examples/typescript/) |
 | **Go** | Standard library HTTP example | [`sdk/examples/go/reporter.go`](sdk/examples/go/reporter.go) |
 | **Rust, Ruby, Java, etc.** | REST API — POST JSON to `/api/v1/tasks/ingest` | [`sdk/docs/universal-integration.md`](sdk/docs/universal-integration.md) |
 | **curl / shell** | Executable bash script | [`sdk/examples/curl/`](sdk/examples/curl/) |
 
-Any language that can make HTTP requests can report agent results to Observius. See the [Universal Integration Guide](sdk/docs/universal-integration.md) for the complete API reference.
+Any language that can make HTTP requests can report agent results to Pokant. See the [Universal Integration Guide](sdk/docs/universal-integration.md) for the complete API reference.
 
 ---
 
@@ -91,7 +91,7 @@ Any language that can make HTTP requests can report agent results to Observius. 
 | [`examples/extract_pricing.py`](examples/extract_pricing.py) | Scrape pricing tiers from any SaaS landing page and return structured JSON |
 | [`examples/monitor_competitors.py`](examples/monitor_competitors.py) | Check a competitor's site for changes and extract key data points |
 | [`examples/fill_form.py`](examples/fill_form.py) | Fill and submit a multi-step web form using provided credentials |
-| [`examples/stagehand_example.py`](examples/stagehand_example.py) | Track a Stagehand session with Observius (screenshots, replay, timing) |
+| [`examples/stagehand_example.py`](examples/stagehand_example.py) | Track a Stagehand session with Pokant (screenshots, replay, timing) |
 
 Run any example directly after setting `ANTHROPIC_API_KEY`:
 
@@ -107,7 +107,7 @@ python examples/extract_pricing.py
 Your code
     │
     ▼
-Observius SDK          run_task(url, task, output_schema)
+Pokant SDK          run_task(url, task, output_schema)
     │
     ▼
 Browser Use + Claude   AI agent navigates, clicks, reads, extracts
@@ -122,7 +122,7 @@ The SDK manages the full lifecycle: launching a browser, building the LLM prompt
 
 ## Comparison
 
-| Feature | Observius | Raw Browser Use | Selenium | UiPath |
+| Feature | Pokant | Raw Browser Use | Selenium | UiPath |
 |---------|-----------|----------------|----------|--------|
 | Setup time | ~5 min | ~1 day | ~2 days | ~1 week |
 | Output format | Structured JSON | Unstructured text | None | Proprietary |
@@ -146,7 +146,7 @@ The SDK manages the full lifecycle: launching a browser, building the LLM prompt
 1. Clone and setup:
 
 ```bash
-git clone <repo-url> && cd observius
+git clone <repo-url> && cd pokant
 make setup
 ```
 
@@ -235,4 +235,4 @@ MIT — see [LICENSE](LICENSE) for details.
 
 ---
 
-⭐ If Observius is useful, please star the repo — it helps others find it.
+⭐ If Pokant is useful, please star the repo — it helps others find it.

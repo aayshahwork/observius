@@ -384,12 +384,12 @@ def _print_result(result) -> None:  # type: ignore[no-untyped-def]
 @cli.command()
 @click.option(
     "--data-dir",
-    default=".observius",
+    default=".pokant",
     show_default=True,
     help="Data directory.",
 )
 def info(data_dir: str) -> None:
-    """Show summary of Observius run data."""
+    """Show summary of Pokant run data."""
     base = Path(data_dir)
     runs_dir = base / "runs"
     screenshots_dir = base / "screenshots"
@@ -454,7 +454,7 @@ def info(data_dir: str) -> None:
     grid.add_row("Screenshots", f"{ss_count} files ({ss_size})")
 
     console.print(
-        Panel(grid, title=f"[bold]Observius[/bold] [dim]{data_dir}/[/dim]", border_style="cyan")
+        Panel(grid, title=f"[bold]Pokant[/bold] [dim]{data_dir}/[/dim]", border_style="cyan")
     )
 
 
@@ -466,7 +466,7 @@ def info(data_dir: str) -> None:
 @cli.command()
 @click.option(
     "--data-dir",
-    default=".observius",
+    default=".pokant",
     show_default=True,
     help="Data directory.",
 )
@@ -483,11 +483,11 @@ def dashboard(data_dir: str, port: int) -> None:
         import uvicorn  # noqa: F811
     except ImportError:
         err_console.print("[bold red]Dashboard requires extra dependencies.[/bold red]")
-        err_console.print("Install with:  [cyan]pip install observius\\[dashboard][/cyan]")
+        err_console.print("Install with:  [cyan]pip install pokant\\[dashboard][/cyan]")
         raise SystemExit(1)
 
     app = create_app(data_dir)
-    console.print(f"[bold]Observius Dashboard[/bold]: [cyan]http://localhost:{port}[/cyan]")
+    console.print(f"[bold]Pokant Dashboard[/bold]: [cyan]http://localhost:{port}[/cyan]")
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")
 
 
@@ -513,7 +513,7 @@ def _parse_duration(value: str) -> int:
 @cli.command()
 @click.option(
     "--data-dir",
-    default=".observius",
+    default=".pokant",
     show_default=True,
     help="Data directory.",
 )
@@ -612,7 +612,7 @@ def clean(data_dir: str, older_than: str, dry_run: bool) -> None:
 
 @cli.command("compile")
 @click.argument("task_id")
-@click.option("--data-dir", default=".observius", show_default=True, help="Data directory.")
+@click.option("--data-dir", default=".pokant", show_default=True, help="Data directory.")
 @click.option("--name", default=None, help="Workflow name (defaults to task ID).")
 @click.option("--params", default=None, help="Comma-separated parameter names, e.g. 'email,password'.")
 @click.option("--script/--no-script", default=True, help="Generate a Playwright script alongside the workflow.")
@@ -683,7 +683,7 @@ def compile_workflow(task_id: str, data_dir: str, name: Optional[str], params: O
 
 @cli.command()
 @click.argument("workflow_id")
-@click.option("--data-dir", default=".observius", show_default=True, help="Data directory.")
+@click.option("--data-dir", default=".pokant", show_default=True, help="Data directory.")
 @click.option("--params", default=None, help='JSON parameters: \'{"email":"test@test.com"}\'')
 @click.option("--headless/--no-headless", default=True, help="Run browser headless (default) or visible.")
 @click.option("--budget", default=50.0, show_default=True, help="Max cost in cents for AI fallback.")

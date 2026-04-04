@@ -16,6 +16,7 @@ import type {
   AlertListResponse,
   AnalyticsPeriod,
   HealthAnalyticsResponse,
+  ScriptListResponse,
 } from "./types";
 
 export class ApiError extends Error {
@@ -123,6 +124,31 @@ export class ApiClient {
     return apiCall<ReplayResponse>(`/api/v1/tasks/${taskId}/replay`, {
       headers: this.headers,
     });
+  }
+
+  async savePlaywrightScript(
+    taskId: string,
+    script: string,
+  ): Promise<{ task_id: string; saved: boolean }> {
+    return apiCall(`/api/v1/tasks/${taskId}/playwright-script`, {
+      method: "PUT",
+      body: { script },
+      headers: this.headers,
+    });
+  }
+
+  async listScripts(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<ScriptListResponse> {
+    const qs = new URLSearchParams();
+    if (params?.limit) qs.set("limit", String(params.limit));
+    if (params?.offset) qs.set("offset", String(params.offset));
+    const query = qs.toString();
+    return apiCall<ScriptListResponse>(
+      `/api/v1/tasks/scripts${query ? `?${query}` : ""}`,
+      { headers: this.headers },
+    );
   }
 
   // Sessions

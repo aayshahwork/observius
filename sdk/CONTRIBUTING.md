@@ -1,4 +1,4 @@
-# Contributing to Observius SDK
+# Contributing to Pokant SDK
 
 ## Dev Setup
 

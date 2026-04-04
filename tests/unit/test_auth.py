@@ -34,7 +34,7 @@ def _make_account(**overrides):
     """Create a mock Account object."""
     defaults = dict(
         id=uuid.uuid4(),
-        email="test@computeruse.dev",
+        email="test@pokant.dev",
         name="Test Account",
         tier="free",
         monthly_step_limit=500,
@@ -113,7 +113,7 @@ class TestAuthValidKey:
         assert resp.status_code == 200
         body = resp.json()
         assert body["account_id"] == str(account.id)
-        assert body["email"] == "test@computeruse.dev"
+        assert body["email"] == "test@pokant.dev"
 
 
 class TestAuthMissingKey:

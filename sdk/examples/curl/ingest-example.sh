@@ -1,13 +1,13 @@
 #!/bin/bash
-# Example: Report a completed browser agent run to Observius via curl.
+# Example: Report a completed browser agent run to Pokant via curl.
 # Works with any agent in any language — just POST JSON.
 #
 # Usage:
 #   bash ingest-example.sh
-#   OBSERVIUS_API_URL=https://api.observius.dev OBSERVIUS_API_KEY=cu_live_... bash ingest-example.sh
+#   POKANT_API_URL=https://api.pokant.dev POKANT_API_KEY=cu_live_... bash ingest-example.sh
 
-API_URL="${OBSERVIUS_API_URL:-http://localhost:8000}"
-API_KEY="${OBSERVIUS_API_KEY:-cu_test_testkey1234567890abcdef12}"
+API_URL="${POKANT_API_URL:-http://localhost:8000}"
+API_KEY="${POKANT_API_KEY:-cu_test_testkey1234567890abcdef12}"
 
 echo "Posting to ${API_URL}/api/v1/tasks/ingest ..."
 echo ""
@@ -38,6 +38,6 @@ curl -s -X POST "${API_URL}/api/v1/tasks/ingest" \
     ]
   }' | python3 -m json.tool
 
-DASHBOARD_URL="${OBSERVIUS_DASHBOARD_URL:-http://localhost:3000}"
+DASHBOARD_URL="${POKANT_DASHBOARD_URL:-http://localhost:3000}"
 echo ""
 echo "View in dashboard: ${DASHBOARD_URL}/tasks"

@@ -1,6 +1,6 @@
 """
 Real desktop automation: Claude looks at your screen, decides actions, 
-PyAutoGUI executes them, ObserviusTracker records everything.
+PyAutoGUI executes them, PokantTracker records everything.
 """
 import time
 import anthropic
@@ -8,7 +8,7 @@ import pyautogui
 import base64
 import io
 from PIL import ImageGrab
-from computeruse import ObserviusTracker
+from computeruse import PokantTracker
 from computeruse.desktop import pillow_screenshot_fn
 
 # Safety: PyAutoGUI failsafe — move mouse to corner to abort
@@ -17,7 +17,7 @@ pyautogui.PAUSE = 0.5
 
 client = anthropic.Anthropic()
 
-tracker = ObserviusTracker(
+tracker = PokantTracker(
     screenshot_fn=pillow_screenshot_fn(),
     task_description="Open TextEdit, type a haiku about coding, save it",
     api_url="http://localhost:8000",
@@ -68,7 +68,7 @@ def execute_action(action):
 
 # Agent loop
 messages = []
-system = """You are controlling a macOS computer. Your task: Open TextEdit, type "Hello from Observius" and then close it without saving.
+system = """You are controlling a macOS computer. Your task: Open TextEdit, type "Hello from Pokant" and then close it without saving.
 
 Use keyboard shortcuts:
 - cmd+space to open Spotlight
@@ -152,11 +152,11 @@ for step_num in range(MAX_STEPS):
             description="Typed 'TextEdit' and pressed Return",
             window_title="Spotlight",
         )
-    elif "hello from observius" in response_text.lower() or "type" in response_text.lower():
-        pyautogui.typewrite("Hello from Observius", interval=0.03)
+    elif "hello from pokant" in response_text.lower() or "type" in response_text.lower():
+        pyautogui.typewrite("Hello from Pokant", interval=0.03)
         tracker.record_desktop_step(
             action_type="desktop_type",
-            description="Typed 'Hello from Observius'",
+            description="Typed 'Hello from Pokant'",
             window_title="TextEdit",
         )
     elif "cmd+w" in response_text.lower() or "close" in response_text.lower():

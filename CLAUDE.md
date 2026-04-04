@@ -1,4 +1,4 @@
-# ComputerUse.dev
+# Pokant
 
 ## Project Overview
 Managed orchestration platform for browser-based AI automation.
@@ -139,7 +139,7 @@ Defined in `shared/constants.py`. Queues: `tasks:free`, `tasks:startup`, `tasks:
 `workers/encryption.py`: HKDF derives a per-account AES-256-GCM key from `ENCRYPTION_MASTER_KEY`. Nonces are random (96-bit). Credentials are encrypted before being stored in the DB and decrypted in the worker at task execution time.
 
 ### SDK (local mode)
-`sdk/computeruse/client.py → executor.py` runs Playwright directly on the calling machine. The cloud path POSTs to `https://api.computeruse.dev/v1` and polls until completion.
+`sdk/computeruse/client.py → executor.py` runs Playwright directly on the calling machine. The cloud path POSTs to `https://api.pokant.dev/v1` and polls until completion.
 
 ## Key Files
 

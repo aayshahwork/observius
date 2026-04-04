@@ -37,7 +37,7 @@ export default function LoginPage() {
         <div className="mx-auto mb-2 flex size-10 items-center justify-center rounded-lg bg-primary/10">
           <KeyRound className="size-5 text-primary" />
         </div>
-        <CardTitle>ComputerUse.dev</CardTitle>
+        <CardTitle>Pokant</CardTitle>
         <CardDescription>
           Enter your API key to access the dashboard
         </CardDescription>

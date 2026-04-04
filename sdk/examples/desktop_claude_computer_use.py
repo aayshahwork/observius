@@ -1,17 +1,17 @@
-"""Desktop automation with Claude's computer_use tool + Observius tracking.
+"""Desktop automation with Claude's computer_use tool + Pokant tracking.
 
 Shows how to track a Claude computer_use agent that controls the full desktop.
 
 Prerequisites:
-    pip install observius anthropic mss
+    pip install pokant anthropic mss
 """
 
 import anthropic
 
-from computeruse import ObserviusTracker
+from computeruse import PokantTracker
 from computeruse.desktop import mss_screenshot_fn
 
-tracker = ObserviusTracker(
+tracker = PokantTracker(
     screenshot_fn=mss_screenshot_fn(),
     task_description="Claude computer_use desktop agent",
     api_url="http://localhost:8000",
@@ -37,6 +37,6 @@ client = anthropic.Anthropic()
 #   )
 #
 # The tracker auto-captures desktop screenshots on every step
-# and sends everything to the Observius dashboard.
+# and sends everything to the Pokant dashboard.
 
 tracker.complete()

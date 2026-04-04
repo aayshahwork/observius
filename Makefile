@@ -1,6 +1,10 @@
 .PHONY: dev test lint typecheck build migrate reset-db fresh load-test
 
 dev:
+	@if [ ! -f .env ]; then \
+		cp .env.example .env; \
+		echo "Created .env from .env.example — edit it to set ANTHROPIC_API_KEY before running tasks."; \
+	fi
 	docker compose up --build
 
 test:

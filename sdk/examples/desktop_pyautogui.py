@@ -1,7 +1,7 @@
 """Desktop automation tracking with PyAutoGUI.
 
 Prerequisites:
-    pip install observius pyautogui
+    pip install pokant pyautogui
 
 Captures full-screen screenshots on every step automatically.
 """
@@ -11,10 +11,10 @@ import time
 
 import pyautogui
 
-from computeruse import ObserviusTracker
+from computeruse import PokantTracker
 from computeruse.desktop import pyautogui_screenshot_fn
 
-tracker = ObserviusTracker(
+tracker = PokantTracker(
     screenshot_fn=pyautogui_screenshot_fn(),
     task_description="Open Calculator and compute 42 * 17",
     api_url="http://localhost:8000",

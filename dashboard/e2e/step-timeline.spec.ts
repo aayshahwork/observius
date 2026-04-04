@@ -122,7 +122,7 @@ test.describe("step timeline rendering", () => {
     await expect(page.getByText(/No visual.*non-browser step/)).toBeVisible();
   });
 
-  test("shows ObserviusTracker hint for SDK task with visual step missing screenshot", async ({
+  test("shows PokantTracker hint for SDK task with visual step missing screenshot", async ({
     authedPage: page,
   }) => {
     await mockTaskDetail(page, SDK_TASK);
@@ -134,7 +134,7 @@ test.describe("step timeline rendering", () => {
     const controls = page.locator(".flex.items-center.gap-1").first();
     await controls.locator("button").nth(2).click();
 
-    await expect(page.getByText(/No screenshot.*ObserviusTracker/)).toBeVisible();
+    await expect(page.getByText(/No screenshot.*PokantTracker/)).toBeVisible();
   });
 
   test("renders timeline bar with correct number of segments", async ({

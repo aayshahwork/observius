@@ -95,8 +95,8 @@ async def create_checkout(
     #     customer=account.stripe_customer_id,
     #     mode="subscription",
     #     line_items=[{"price": price_id, "quantity": 1}],
-    #     success_url="https://app.computeruse.dev/settings?checkout=success",
-    #     cancel_url="https://app.computeruse.dev/settings?checkout=cancel",
+    #     success_url="https://app.pokant.dev/settings?checkout=success",
+    #     cancel_url="https://app.pokant.dev/settings?checkout=cancel",
     #     metadata={"account_id": str(account.id), "tier": body.tier},
     # )
     checkout_url = f"https://checkout.stripe.com/stub/{body.tier}"
@@ -308,7 +308,7 @@ async def create_portal(
     # TODO: wire up stripe
     # session = stripe.billing_portal.Session.create(
     #     customer=account.stripe_customer_id,
-    #     return_url="https://app.computeruse.dev/settings",
+    #     return_url="https://app.pokant.dev/settings",
     # )
     portal_url = f"https://billing.stripe.com/stub/{account.stripe_customer_id}"
 

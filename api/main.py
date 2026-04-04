@@ -78,7 +78,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://localhost:8080",
-        "https://app.computeruse.dev",
+        "https://app.pokant.dev",
     ],
     allow_credentials=True,
     allow_methods=["*"],

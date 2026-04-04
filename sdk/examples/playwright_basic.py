@@ -3,17 +3,17 @@ Minimal track() example with Playwright.
 
 Wraps a Playwright Page so every action (goto, click, fill, etc.)
 is automatically timed, screenshotted, and recorded. After the
-block exits, run metadata and screenshots are saved to .observius/.
+block exits, run metadata and screenshots are saved to .pokant/.
 
 Prerequisites:
-    pip install observius playwright
+    pip install pokant playwright
     playwright install chromium
 
 Expected output:
     Steps: 2
     Step 1: goto(https://example.com) - 234ms
     Step 2: click(a) - 89ms
-    Replay saved to .observius/replays/<run-id>.html
+    Replay saved to .pokant/replays/<run-id>.html
 """
 
 import asyncio
