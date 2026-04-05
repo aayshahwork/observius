@@ -33,6 +33,6 @@ def is_r2_configured() -> bool:
     if key in placeholders or secret in placeholders:
         return False
     # Cloudflare R2 endpoints must have a valid account ID (32-char hex)
-    if "xxx" in endpoint or "your_" in endpoint:
+    if "xxx" in endpoint or "your_" in endpoint or "ACCOUNT_ID" in endpoint:
         return False
     return True

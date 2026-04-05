@@ -221,28 +221,32 @@ def _save_partial_and_requeue(task_id: str, entry: InFlightTask) -> None:
             with tempfile.TemporaryDirectory() as tmpdir:
                 replay_path = f"{tmpdir}/{task_id}_partial.html"
                 replay_gen.generate(replay_path)
-                # Upload is best-effort; skip if R2 is unreachable
-                try:
-                    import boto3
+                # Upload is best-effort; skip if R2 is not configured
+                from workers.config import is_r2_configured
+                if not is_r2_configured():
+                    logger.info("R2 not configured, skipping partial replay upload for task %s", task_id)
+                else:
+                    try:
+                        import boto3
 
-                    from workers.config import worker_settings
+                        from workers.config import worker_settings
 
-                    s3_key = f"replays/{task_id}/replay_partial.html"
-                    s3 = boto3.client(
-                        "s3",
-                        endpoint_url=worker_settings.R2_ENDPOINT or None,
-                        aws_access_key_id=worker_settings.R2_ACCESS_KEY,
-                        aws_secret_access_key=worker_settings.R2_SECRET_KEY,
-                    )
-                    s3.upload_file(
-                        replay_path,
-                        worker_settings.R2_BUCKET_NAME,
-                        s3_key,
-                        ExtraArgs={"ContentType": "text/html"},
-                    )
-                    logger.info("Partial replay uploaded: %s", s3_key)
-                except Exception:
-                    logger.warning("Failed to upload partial replay for task %s", task_id)
+                        s3_key = f"replays/{task_id}/replay_partial.html"
+                        s3 = boto3.client(
+                            "s3",
+                            endpoint_url=worker_settings.R2_ENDPOINT or None,
+                            aws_access_key_id=worker_settings.R2_ACCESS_KEY,
+                            aws_secret_access_key=worker_settings.R2_SECRET_KEY,
+                        )
+                        s3.upload_file(
+                            replay_path,
+                            worker_settings.R2_BUCKET_NAME,
+                            s3_key,
+                            ExtraArgs={"ContentType": "text/html"},
+                        )
+                        logger.info("Partial replay uploaded: %s", s3_key)
+                    except Exception:
+                        logger.warning("Failed to upload partial replay for task %s", task_id)
         except Exception:
             logger.warning("Failed to generate partial replay for task %s", task_id)
 

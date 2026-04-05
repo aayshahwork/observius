@@ -43,10 +43,10 @@ def _get_client():
         if _client is not None:
             return _client
 
-        from api.config import settings
-
-        if not settings.R2_ACCESS_KEY or not settings.R2_SECRET_KEY:
+        if not is_r2_configured():
             return None
+
+        from api.config import settings
 
         import boto3
         from botocore.config import Config
@@ -130,6 +130,6 @@ def is_r2_configured() -> bool:
     placeholders = {"your_r2_access_key", "your_r2_secret_key", "your_r2_endpoint", "xxx"}
     if key in placeholders or secret in placeholders:
         return False
-    if "xxx" in endpoint or "your_" in endpoint:
+    if "xxx" in endpoint or "your_" in endpoint or "ACCOUNT_ID" in endpoint:
         return False
     return True
