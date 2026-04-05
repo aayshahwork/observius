@@ -78,6 +78,9 @@ _cors_origins = [
     "http://localhost:3000",
     "http://localhost:8080",
     "https://app.pokant.dev",
+    "https://computeruse.dev",
+    "https://app.computeruse.dev",
+    "https://observius.vercel.app",
 ]
 # Allow Vercel preview and production domains
 import os as _os
@@ -90,7 +93,7 @@ _cors_origins.append("https://pokant.vercel.app")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
-    allow_origin_regex=r"https://pokant-.*\.vercel\.app",
+    allow_origin_regex=r"https://(pokant|observius)-.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -1,0 +1,25 @@
+{
+  "task_id": "8894c937-5dd3-4d96-a5a2-f7e6f3a64591",
+  "generated_at": "2026-04-03T01:17:17.274059+00:00",
+  "total_steps": 2,
+  "steps": [
+    {
+      "step_number": 1,
+      "action_type": "navigate",
+      "description": "root=NavigateActionModel(navigate=NavigateAction(url='https://en.wikipedia.org/wiki/Y_Combinator', new_tab=False))",
+      "screenshot_path": "",
+      "success": true,
+      "error": null,
+      "timestamp": "2026-04-03T01:17:16.038275+00:00"
+    },
+    {
+      "step_number": 2,
+      "action_type": "done",
+      "description": "root=DoneActionModel(done=DoneAction(text='{\"founding_year\": \"2005\", \"founders\": [\"Paul Graham\", \"Jessica Livingston\", \"Robert Tappan Morris\", \"Trevor Blackwell\"]}', success=True, files_to_display=[]))",
+      "screenshot_path": "replays/screenshots/step_0002.png",
+      "success": true,
+      "error": null,
+      "timestamp": "2026-04-03T01:17:16.039792+00:00"
+    }
+  ]
+}
