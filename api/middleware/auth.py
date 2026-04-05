@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime, timezone
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -25,11 +25,25 @@ def _hash_key(raw_key: str) -> str:
     return hashlib.sha256(raw_key.encode()).hexdigest()
 
 
+def _extract_api_key(request: Request) -> str:
+    """Extract API key from X-API-Key header or Authorization: Bearer header."""
+    key = request.headers.get("X-API-Key") or ""
+    if not key:
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            key = auth[7:]
+    return key.strip()
+
+
 async def get_current_account(
-    x_api_key: str = Header(..., alias="X-API-Key"),
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> Account:
-    """FastAPI dependency that authenticates via X-API-Key header.
+    """FastAPI dependency that authenticates via API key.
+
+    Accepts the key from either header:
+      - X-API-Key: <key>              (curl / direct clients)
+      - Authorization: Bearer <key>   (SDK cloud mode)
 
     1. Hash the raw key with SHA-256.
     2. Look up api_keys by key_hash.
@@ -40,13 +54,14 @@ async def get_current_account(
     Returns the Account on success.
     Raises HTTPException(401) on any failure.
     """
-    if not x_api_key:
+    raw_key = _extract_api_key(request)
+    if not raw_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"error_code": "UNAUTHORIZED", "message": "Missing API key."},
+            detail={"error_code": "UNAUTHORIZED", "message": "Missing API key. Provide X-API-Key or Authorization: Bearer header."},
         )
 
-    key_hash = _hash_key(x_api_key)
+    key_hash = _hash_key(raw_key)
 
     stmt = (
         select(ApiKey)

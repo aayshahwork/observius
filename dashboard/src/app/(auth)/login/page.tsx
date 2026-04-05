@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,6 +60,16 @@ export default function LoginPage() {
             Continue
           </Button>
         </form>
+
+        <p className="mt-4 text-center text-xs text-muted-foreground">
+          Need a key?{" "}
+          <Link
+            href="/signup"
+            className="text-primary underline underline-offset-4 hover:text-primary/80"
+          >
+            Sign up
+          </Link>
+        </p>
       </CardContent>
     </Card>
   );

@@ -189,14 +189,13 @@ class TestIngestTask:
         assert mock_db.add.call_count == 4
 
     def test_ingest_requires_auth(self):
-        """POST without X-API-Key header -> 422 (missing required header)."""
+        """POST without API key header -> 401."""
         no_auth_client = TestClient(app)
         resp = no_auth_client.post(
             "/api/v1/tasks/ingest",
             json={"status": "completed"},
         )
-        # FastAPI returns 422 for missing required Header(...) parameter
-        assert resp.status_code == 422
+        assert resp.status_code == 401
 
     def test_duplicate_task_id_returns_409(self, client, mock_db):
         """POST same task_id twice -> 409 on second."""

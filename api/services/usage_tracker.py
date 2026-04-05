@@ -18,20 +18,41 @@ class UsageTracker:
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
 
-    async def increment_steps(self, account_id: uuid.UUID, step_count: int) -> int:
-        """Atomically increment monthly_steps_used and return the new total."""
+    async def try_increment_steps(
+        self, account_id: uuid.UUID, step_count: int
+    ) -> tuple[bool, int]:
+        """Atomically increment steps only if quota allows.
+
+        Returns (allowed, new_total).  If the increment would exceed the
+        monthly limit the UPDATE is skipped and (False, current_total) is
+        returned — no partial write occurs.
+        """
         result = await self._db.execute(
             text(
                 "UPDATE accounts "
                 "SET monthly_steps_used = monthly_steps_used + :step_count "
                 "WHERE id = :account_id "
+                "  AND monthly_steps_used + :step_count <= monthly_step_limit "
                 "RETURNING monthly_steps_used"
             ),
             {"step_count": step_count, "account_id": str(account_id)},
         )
-        row = result.one()
-        await self._db.commit()
-        return row[0]
+        row = result.one_or_none()
+
+        if row is not None:
+            await self._db.commit()
+            return True, row[0]
+
+        # Quota would be exceeded — fetch current total for the caller.
+        current = await self._db.execute(
+            text(
+                "SELECT monthly_steps_used FROM accounts WHERE id = :account_id"
+            ),
+            {"account_id": str(account_id)},
+        )
+        current_row = current.one_or_none()
+        await self._db.rollback()
+        return False, current_row[0] if current_row else 0
 
     async def check_quota(self, account_id: uuid.UUID) -> bool:
         """Return True if the account has remaining quota."""

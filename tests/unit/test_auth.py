@@ -117,14 +117,27 @@ class TestAuthValidKey:
 
 
 class TestAuthMissingKey:
-    def test_missing_key_returns_422(self):
-        """FastAPI returns 422 when required header is missing."""
+    def test_missing_key_returns_401(self):
+        """Returns 401 when no API key header is provided."""
         db = _mock_db_with_result(None)
         test_app = _build_app(db)
         client = TestClient(test_app)
 
         resp = client.get("/protected")
-        assert resp.status_code == 422
+        assert resp.status_code == 401
+        assert resp.json()["detail"]["error_code"] == "UNAUTHORIZED"
+
+    def test_bearer_token_works(self):
+        """Authorization: Bearer header is accepted as an alternative to X-API-Key."""
+        account = _make_account()
+        api_key = _make_api_key(account)
+        db = _mock_db_with_result(api_key)
+        test_app = _build_app(db)
+        client = TestClient(test_app)
+
+        resp = client.get("/protected", headers={"Authorization": f"Bearer {TEST_RAW_KEY}"})
+        assert resp.status_code == 200
+        assert resp.json()["account_id"] == str(account.id)
 
 
 class TestAuthInvalidKey:

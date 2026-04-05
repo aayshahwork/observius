@@ -20,6 +20,7 @@ from api.middleware.logging import StructuredLoggingMiddleware
 from api.middleware.metrics import PrometheusMiddleware
 from api.routes.account import router as account_router
 from api.routes.audit import router as audit_router
+from api.routes.auth import router as auth_router
 from api.routes.billing import router as billing_router
 from api.routes.sessions import router as sessions_router
 from api.routes.alerts import router as alerts_router
@@ -73,13 +74,23 @@ app = FastAPI(
 # Middleware (order matters: last added = first executed)
 # ---------------------------------------------------------------------------
 
+_cors_origins = [
+    "http://localhost:3000",
+    "http://localhost:8080",
+    "https://app.pokant.dev",
+]
+# Allow Vercel preview and production domains
+import os as _os
+_vercel_url = _os.environ.get("DASHBOARD_URL", "")
+if _vercel_url:
+    _cors_origins.append(_vercel_url.rstrip("/"))
+# Always allow *.vercel.app for preview deployments
+_cors_origins.append("https://pokant.vercel.app")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:8080",
-        "https://app.pokant.dev",
-    ],
+    allow_origins=_cors_origins,
+    allow_origin_regex=r"https://pokant-.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -92,6 +103,7 @@ app.add_middleware(PrometheusMiddleware)
 # Routers
 # ---------------------------------------------------------------------------
 
+app.include_router(auth_router)
 app.include_router(tasks_router)
 app.include_router(analytics_router)
 app.include_router(alerts_router)

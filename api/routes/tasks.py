@@ -35,6 +35,7 @@ from api.schemas.task import ErrorResponse, StepResponse, TaskCreateRequest, Tas
 from shared.constants import TIER_LIMITS
 from api.services.audit_logger import TASK_CANCELLED, TASK_CREATED, TASK_INGESTED, TASK_RETRIED, AuditLogger
 from api.services.r2 import _get_client as _get_r2_client, presign_replay, presign_screenshot
+from api.services.usage_tracker import UsageTracker
 from shared.url_validator import SSRFBlockedError, validate_url_async, validate_webhook_url
 
 logger = structlog.get_logger("api.tasks")
@@ -50,10 +51,17 @@ _celery.conf.update(task_serializer="json", accept_content=["json"])
 
 def _task_to_response(task: Task) -> TaskResponse:
     """Convert a Task ORM object to a TaskResponse."""
-    # browser-use may store result as a plain string; normalize to dict
+    # browser-use may store result as a JSON string; try to parse it first
     result = task.result
     if isinstance(result, str):
-        result = {"text": result}
+        try:
+            parsed = json.loads(result)
+            if isinstance(parsed, dict):
+                result = parsed
+            else:
+                result = {"text": result}
+        except (json.JSONDecodeError, ValueError):
+            result = {"text": result}
     return TaskResponse(
         task_id=task.id,
         url=task.url,
@@ -358,6 +366,13 @@ async def ingest_task(
 
     await db.commit()
     await db.refresh(task)
+
+    # -- Increment monthly usage --
+    step_count = len(body.steps) if body.steps else 1
+    tracker = UsageTracker(db)
+    allowed, total = await tracker.try_increment_steps(account.id, step_count)
+    if not allowed:
+        logger.warning("quota_exceeded_on_ingest", account_id=str(account.id), total=total)
 
     # -- Evaluate alert conditions (best-effort, never blocks ingest) --
     try:
