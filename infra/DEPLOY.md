@@ -125,7 +125,7 @@ Set these as **shared variables** across all services in the Railway project:
 | Variable | Value |
 |----------|-------|
 | `PORT` | `3000` |
-| `NEXT_PUBLIC_API_URL` | `https://<api-service>.up.railway.app` |
+| `NEXT_PUBLIC_API_URL` | `https://api.pokant.live` |
 | `INTERNAL_API_URL` | `http://api.railway.internal:8000` |
 
 ### Optional (set if using these features)
@@ -171,11 +171,19 @@ Or push to the connected GitHub repo — Railway auto-deploys on push.
 
 ## Step 7: Set Up Custom Domain (Optional)
 
-In the Railway dashboard, add custom domains for:
-- **API:** `api.computeruse.dev`
-- **Dashboard:** `app.computeruse.dev` or `observius.vercel.app`
+In the Railway dashboard, add custom domains for each service:
+- **API:** `api.pokant.live`
+- **Dashboard:** `app.pokant.live`
 
-Update `NEXT_PUBLIC_API_URL` to match the API's public domain.
+Then in Cloudflare DNS (pokant.live zone), add CNAME records:
+```
+api.pokant.live  → CNAME → <api-service>.up.railway.app
+app.pokant.live  → CNAME → <dashboard-service>.up.railway.app
+```
+
+Set Cloudflare proxy to **DNS only** (grey cloud) for these records — Railway handles SSL.
+
+Update `NEXT_PUBLIC_API_URL` to `https://api.pokant.live` in the dashboard service.
 
 ## Networking
 

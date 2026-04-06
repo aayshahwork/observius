@@ -27,19 +27,14 @@
 
 ## 2. Environment Variables
 
-Set these in Vercel project settings → **Settings → Environment Variables**:
+Set these in Vercel project settings > **Settings > Environment Variables**:
 
 | Variable | Value | Required |
 | --- | --- | --- |
-| `NEXT_PUBLIC_API_URL` | `https://your-api.railway.app` | Yes |
-
-**Example:**
-```
-NEXT_PUBLIC_API_URL=https://observius-api-production.up.railway.app
-```
+| `NEXT_PUBLIC_API_URL` | `https://api.pokant.live` | Yes |
 
 Notes:
-- `NEXT_PUBLIC_API_URL` is used client-side (browser fetch calls). It must be the public Railway URL.
+- `NEXT_PUBLIC_API_URL` is used client-side (browser fetch calls). It must be the public API URL.
 - Do NOT include a trailing slash.
 - The `INTERNAL_API_URL` env var is only needed for Docker/server-side proxying and is not used on Vercel.
 
@@ -49,73 +44,54 @@ After deployment, check these pages:
 
 | URL | Expected |
 | --- | --- |
-| `https://your-domain.vercel.app/` | Landing page (no auth) |
-| `https://your-domain.vercel.app/signup` | Signup form (no auth) |
-| `https://your-domain.vercel.app/login` | Login form (no auth) |
-| `https://your-domain.vercel.app/tasks` | Redirects to /login (requires auth) |
+| `https://app.pokant.live/` | Landing page (no auth) |
+| `https://app.pokant.live/signup` | Signup form (no auth) |
+| `https://app.pokant.live/login` | Login form (no auth) |
+| `https://app.pokant.live/tasks` | Redirects to /login (requires auth) |
 
 Test the signup flow:
 1. Go to `/signup`, enter an email
 2. You should get an API key back (this calls the Railway API)
 3. Click "Continue to Dashboard" — should redirect to `/tasks`
 
-## 4. Custom Domain (computeruse.dev)
+## 4. Custom Domain (pokant.live)
 
-1. Go to Vercel project → **Settings → Domains**
-2. Add `computeruse.dev` (or `app.computeruse.dev` for a subdomain)
-3. Vercel will show DNS records to add:
+Since `pokant.live` DNS is on Cloudflare:
 
-   **For apex domain (computeruse.dev):**
-   ```
-   Type: A
-   Name: @
-   Value: 76.76.21.21
-   ```
+1. Go to Vercel project > **Settings > Domains**
+2. Add `app.pokant.live`
+3. In Cloudflare DNS, add:
 
-   **For subdomain (app.computeruse.dev):**
    ```
    Type: CNAME
    Name: app
    Value: cname.vercel-dns.com
+   Proxy: DNS only (grey cloud)
    ```
 
-4. Add the DNS records at your registrar (Cloudflare, Namecheap, etc.)
-5. Vercel auto-provisions an SSL certificate
-6. Update `NEXT_PUBLIC_API_URL` if your API also has a custom domain
+4. Vercel auto-provisions an SSL certificate
+5. Ensure `NEXT_PUBLIC_API_URL` is set to `https://api.pokant.live`
 
 ## 5. CORS on the Railway API
 
-The dashboard makes client-side fetch calls to the API. Make sure your FastAPI CORS middleware allows the Vercel domain:
+The dashboard makes client-side fetch calls to the API. The CORS middleware in `api/main.py` already allows:
 
-```python
-# api/main.py
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://computeruse.dev",
-        "https://app.computeruse.dev",
-        "https://your-project.vercel.app",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-```
-
-If the API currently uses `allow_origins=["*"]`, this already works but should be tightened for production.
+- `https://pokant.live`
+- `https://app.pokant.live`
+- `https://pokant.vercel.app`
+- Any `https://pokant-*.vercel.app` (preview deployments)
 
 ## 6. Redeployments
 
 - **Automatic:** Every push to `main` triggers a new deployment
-- **Manual:** Vercel dashboard → Deployments → Redeploy
+- **Manual:** Vercel dashboard > Deployments > Redeploy
 - **Env var changes:** Require a redeployment to take effect (Vercel does NOT auto-redeploy on env var change)
 
 ## 7. Troubleshooting
 
 **Signup returns "Could not connect to the API":**
-- Check that `NEXT_PUBLIC_API_URL` is set and points to the Railway API
-- Check Railway API is running and healthy: `curl https://your-api.railway.app/health`
+- Check that `NEXT_PUBLIC_API_URL` is set to `https://api.pokant.live`
+- Check Railway API is running and healthy: `curl https://api.pokant.live/health`
 - Check CORS is configured on the API
 
 **Login works but dashboard pages are blank:**

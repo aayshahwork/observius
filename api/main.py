@@ -77,23 +77,23 @@ app = FastAPI(
 _cors_origins = [
     "http://localhost:3000",
     "http://localhost:8080",
-    "https://app.pokant.dev",
-    "https://computeruse.dev",
-    "https://app.computeruse.dev",
-    "https://observius.vercel.app",
+    # Production domains
+    "https://pokant.live",
+    "https://app.pokant.live",
+    "https://api.pokant.live",
 ]
-# Allow Vercel preview and production domains
+# Allow custom DASHBOARD_URL override (e.g. staging)
 import os as _os
 _vercel_url = _os.environ.get("DASHBOARD_URL", "")
 if _vercel_url:
     _cors_origins.append(_vercel_url.rstrip("/"))
-# Always allow *.vercel.app for preview deployments
+# Allow Vercel preview deployments
 _cors_origins.append("https://pokant.vercel.app")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
-    allow_origin_regex=r"https://(pokant|observius)-.*\.vercel\.app",
+    allow_origin_regex=r"https://pokant(-[a-z0-9]+)?\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
