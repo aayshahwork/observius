@@ -1,0 +1,17 @@
+# Railway deployment configuration for the Next.js dashboard service.
+#
+# In the Railway dashboard, create a new service and either:
+#   1. Copy this file's contents into the service's railway.toml, OR
+#   2. Set the Dockerfile path to infra/Dockerfile.dashboard manually.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "infra/Dockerfile.dashboard"
+watchPatterns = ["dashboard/**", "infra/Dockerfile.dashboard"]
+
+[deploy]
+healthcheckPath = "/"
+healthcheckTimeout = 10
+numReplicas = 1
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5

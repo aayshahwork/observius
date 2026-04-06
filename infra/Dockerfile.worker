@@ -25,4 +25,10 @@ COPY api/ ./api/
 ENV PYTHONPATH=/app \
     PYTHONUNBUFFERED=1
 
+# Health check server for Railway (port 8001)
+EXPOSE 8001
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=15s \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"
+
 CMD ["celery", "-A", "workers.main", "worker", "--loglevel=info", "--pool=prefork", "--concurrency=2"]

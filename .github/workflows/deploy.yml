@@ -48,7 +48,7 @@ jobs:
       - name: Build and push Dashboard
         uses: docker/build-push-action@v7
         with:
-          context: ./dashboard
+          context: .
           file: infra/Dockerfile.dashboard
           push: true
           tags: ghcr.io/${{ github.repository }}/dashboard:${{ github.sha }}

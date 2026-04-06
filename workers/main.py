@@ -19,8 +19,10 @@ import workers.metrics  # noqa: F401 — registers Celery signal handlers
 import workers.canary  # noqa: F401 — registers canary metric gauges
 
 from workers.shutdown import GracefulShutdownHandler
+from workers.healthcheck import start_health_server
 
 GracefulShutdownHandler().register()
+start_health_server()
 
 # ---------------------------------------------------------------------------
 # Tier-based queue routing with visibility timeouts

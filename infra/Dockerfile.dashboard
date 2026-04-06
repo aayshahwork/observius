@@ -3,10 +3,12 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
+# Copy package files from dashboard/
+COPY dashboard/package.json dashboard/package-lock.json* ./
 RUN npm ci
 
-COPY . .
+# Copy the full dashboard source
+COPY dashboard/ .
 
 ENV NEXT_TELEMETRY_DISABLED=1
 # Ensure public/ exists for the COPY below (may be empty)

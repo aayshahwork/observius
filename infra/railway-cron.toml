@@ -1,0 +1,15 @@
+# Railway deployment configuration for the monthly usage reset cron job.
+#
+# In the Railway dashboard, create a new service of type "Cron Job" and set:
+#   - Dockerfile path: infra/Dockerfile.api
+#   - Cron schedule: 0 0 1 * *  (midnight UTC on the 1st of each month)
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "infra/Dockerfile.api"
+watchPatterns = ["api/management/**", "shared/**", "infra/Dockerfile.api"]
+
+[deploy]
+startCommand = "python -m api.management.reset_usage"
+cronSchedule = "0 0 1 * *"
+restartPolicyType = "NEVER"

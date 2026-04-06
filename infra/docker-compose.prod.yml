@@ -44,8 +44,8 @@ services:
 
   dashboard:
     build:
-      context: ../dashboard
-      dockerfile: ../infra/Dockerfile.dashboard
+      context: ..
+      dockerfile: infra/Dockerfile.dashboard
     ports:
       - "3000:3000"
     env_file: ../.env
