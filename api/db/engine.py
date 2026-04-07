@@ -9,7 +9,13 @@ from api.config import settings
 # asyncpg does not enable SSL by default, so we must pass an ssl context explicitly
 # when connecting to a remote host.
 _is_remote = "localhost" not in settings.DATABASE_URL and "127.0.0.1" not in settings.DATABASE_URL
-_connect_args = {"ssl": ssl.create_default_context()} if _is_remote else {}
+if _is_remote:
+    _ssl_ctx = ssl.create_default_context()
+    _ssl_ctx.check_hostname = False
+    _ssl_ctx.verify_mode = ssl.CERT_NONE
+    _connect_args: dict = {"ssl": _ssl_ctx}
+else:
+    _connect_args = {}
 
 engine = create_async_engine(
     settings.DATABASE_URL,

@@ -70,7 +70,13 @@ def _get_async_engine() -> Any:
             "localhost" not in worker_settings.DATABASE_URL
             and "127.0.0.1" not in worker_settings.DATABASE_URL
         )
-        _connect_args = {"ssl": ssl.create_default_context()} if _is_remote else {}
+        if _is_remote:
+            _ssl_ctx = ssl.create_default_context()
+            _ssl_ctx.check_hostname = False
+            _ssl_ctx.verify_mode = ssl.CERT_NONE
+            _connect_args: dict = {"ssl": _ssl_ctx}
+        else:
+            _connect_args = {}
 
         _async_engine = _cae(
             worker_settings.DATABASE_URL,
