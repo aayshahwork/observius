@@ -63,7 +63,14 @@ def _get_async_engine() -> Any:
     """Lazily create the async engine."""
     global _async_engine
     if _async_engine is None:
+        import ssl
         from sqlalchemy.ext.asyncio import create_async_engine as _cae
+
+        _is_remote = (
+            "localhost" not in worker_settings.DATABASE_URL
+            and "127.0.0.1" not in worker_settings.DATABASE_URL
+        )
+        _connect_args = {"ssl": ssl.create_default_context()} if _is_remote else {}
 
         _async_engine = _cae(
             worker_settings.DATABASE_URL,
@@ -71,6 +78,7 @@ def _get_async_engine() -> Any:
             max_overflow=3,
             pool_pre_ping=True,
             pool_recycle=1800,
+            connect_args=_connect_args,
         )
     return _async_engine
 
