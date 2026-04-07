@@ -27,6 +27,7 @@ from workers.captcha_solver import CaptchaSolver
 from workers.config import worker_settings
 from workers.credential_injector import CredentialInjector
 from workers.models import ActionType, StepData, TaskConfig, TaskResult
+from workers.output_validator import OutputValidator, ValidationError
 from workers.stuck_detector import StuckDetector
 
 logger = logging.getLogger(__name__)
@@ -199,6 +200,7 @@ class TaskExecutor:
         self.account_id = account_id
         self.steps: List[StepData] = []
         self._stuck_detector = StuckDetector()
+        self._output_validator = OutputValidator()
 
     async def execute(self) -> TaskResult:
         """Execute the task end-to-end.
@@ -310,6 +312,20 @@ class TaskExecutor:
                 result_data = None
                 if hasattr(raw_result, "final_result"):
                     result_data = raw_result.final_result()
+
+                # -- Validate output against schema --
+                if result_data and self.config.output_schema:
+                    try:
+                        result_data = self._output_validator.validate(
+                            result_data, self.config.output_schema,
+                        )
+                    except ValidationError as val_err:
+                        logger.warning(
+                            "browser_use output validation failed: %s",
+                            val_err.message,
+                        )
+                        # Keep unvalidated result — browser_use manages its
+                        # own browser session so we can't extract from the page.
 
                 # -- Step 5: Enrich steps from browser_use history --
                 self._enrich_steps_from_history(raw_result)
@@ -1090,9 +1106,40 @@ class TaskExecutor:
                             })
 
                     elif tool_name == "done":
-                        result_data = tool_input.get("result")
+                        raw_result = tool_input.get("result")
                         action_description = tool_input.get("message", "Task completed")
                         action_type = ActionType.EXTRACT
+
+                        # Validate against output_schema if provided
+                        if raw_result and self.config.output_schema:
+                            try:
+                                raw_result = self._output_validator.validate(
+                                    raw_result, self.config.output_schema,
+                                )
+                            except ValidationError as val_err:
+                                schema_str = self._output_validator.format_schema(
+                                    self.config.output_schema,
+                                )
+                                logger.warning(
+                                    "Output validation failed (will retry): %s",
+                                    val_err.message,
+                                )
+                                tool_results.append({
+                                    "type": "tool_result",
+                                    "tool_use_id": block.id,
+                                    "content": [{
+                                        "type": "text",
+                                        "text": (
+                                            f"Validation failed: {val_err.message}\n"
+                                            f"Please call done again with a result "
+                                            f"matching: {schema_str}"
+                                        ),
+                                    }],
+                                    "is_error": True,
+                                })
+                                continue  # don't set done=True, let LLM retry
+
+                        result_data = raw_result
                         tool_results.append({
                             "type": "tool_result",
                             "tool_use_id": block.id,
