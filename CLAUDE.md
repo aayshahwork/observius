@@ -17,9 +17,11 @@ Monorepo: Python backend (FastAPI + Celery) + TypeScript frontend (Next.js 15).
 - **Database:** PostgreSQL 16 (Supabase), SQLAlchemy async, UUIDv7 PKs, Row-Level Security
 - **Browser:** Playwright + Browserbase (cloud CDP sessions)
 - **LLM:** Anthropic Claude API (`claude-sonnet-4-5` default)
-- **Storage:** Cloudflare R2 (S3-compatible) for replays/recordings/screenshots
+- **Auth:** Email+password (PBKDF2-SHA256, 600k iterations) + API key (SHA-256 hashed)
+- **Storage:** Cloudflare R2 (S3-compatible) for replays/recordings/screenshots (graceful fallback to local when unconfigured)
 - **Payments:** Stripe (subscriptions + usage metering)
 - **Credentials:** AES-256-GCM with HKDF-derived per-account keys
+- **Deployment:** Railway (API, Worker, Cron, Dashboard services) + Vercel (dashboard)
 
 ### Frontend
 - **Framework:** Next.js 15 (App Router), React 19, TypeScript
@@ -43,11 +45,11 @@ Monorepo: Python backend (FastAPI + Celery) + TypeScript frontend (Next.js 15).
 ├── dependencies.py      Shared FastAPI dependency injection
 ├── local_bridge.py      Dev-mode local API for demos
 ├── db/
-│   ├── engine.py        SQLAlchemy async engine + session factory
-│   ├── migrations/      12 SQL migration files (UUIDv7, RLS, alerts, workflows)
+│   ├── engine.py        SQLAlchemy async engine + session factory (SSL/TLS for remote PG)
+│   ├── migrations/      13 SQL migration files (UUIDv7, RLS, alerts, workflows, auth)
 │   └── init-migrations.sh
 ├── middleware/
-│   ├── auth.py          SHA-256 key hashing + RLS context
+│   ├── auth.py          Dual auth: API key (X-API-Key / Bearer) + email/password
 │   ├── rate_limiter.py  Sliding window (Redis)
 │   ├── logging.py       StructuredLoggingMiddleware
 │   ├── metrics.py       PrometheusMiddleware
@@ -62,6 +64,7 @@ Monorepo: Python backend (FastAPI + Celery) + TypeScript frontend (Next.js 15).
 │   └── audit_log.py     AuditLog (immutable, RLS)
 ├── routes/
 │   ├── tasks.py         POST/GET/DELETE tasks, ingest, retry, replay, compile, script
+│   ├── auth.py          POST /auth/register + /auth/login (email+password, PBKDF2-SHA256)
 │   ├── analytics.py     Fleet health aggregates
 │   ├── alerts.py        Alert list + acknowledge
 │   ├── sessions.py      Browser session CRUD
@@ -83,8 +86,9 @@ Monorepo: Python backend (FastAPI + Celery) + TypeScript frontend (Next.js 15).
 ├── executor.py          Core TaskExecutor: Playwright + LLM loop, screenshots
 ├── browser_manager.py   Playwright lifecycle, stealth scripts injection
 ├── models.py            ActionType, StepData, TaskConfig, TaskResult (dataclasses)
-├── config.py            WorkerSettings (pydantic-settings)
-├── db.py                Sync session factory for Celery
+├── config.py            WorkerSettings (pydantic-settings) + is_r2_configured()
+├── healthcheck.py       HTTP health server on port 8001 (Railway probes)
+├── db.py                Sync session factory for Celery (SSL/TLS for remote PG)
 ├── encryption.py        AES-256-GCM + HKDF key derivation
 ├── credential_injector.py  Login form credential injection
 ├── captcha_solver.py    2Captcha integration
@@ -158,8 +162,10 @@ Monorepo: Python backend (FastAPI + Celery) + TypeScript frontend (Next.js 15).
 └── browser_provider.py  Browser factory
 
 /dashboard               Next.js 15 frontend
+├── vercel.json          Vercel deployment config
 ├── src/app/
 │   ├── (auth)/login     Login page
+│   ├── contact/         Enterprise contact form (Formspree)
 │   └── (dashboard)/
 │       ├── overview/    Fleet health overview
 │       ├── tasks/       Task list + [id] detail + new
@@ -221,7 +227,12 @@ Monorepo: Python backend (FastAPI + Celery) + TypeScript frontend (Next.js 15).
 ├── Dockerfile.worker
 ├── Dockerfile.dashboard
 ├── docker-compose.prod.yml
-└── railway.toml         Railway deployment config
+├── railway.toml         Railway API service config
+├── railway-worker.toml  Railway worker service config
+├── railway-dashboard.toml  Railway dashboard service config
+├── railway-cron.toml    Railway cron service config
+├── worker-entrypoint.sh Celery worker entrypoint script
+└── DEPLOY.md            Railway deployment guide
 
 /examples                Standalone runnable examples
 ├── extract_pricing.py
@@ -233,7 +244,9 @@ Monorepo: Python backend (FastAPI + Celery) + TypeScript frontend (Next.js 15).
 
 /scripts                 Dev scripts
 ├── setup.sh
-└── worker_health.py
+├── worker_health.py
+├── verify_production.py 12-check post-deploy verification
+└── test_cloud_pipeline.py  19-check end-to-end pipeline test
 ```
 
 ## Commands
@@ -326,6 +339,10 @@ make setup        # Initial dev setup (scripts/setup.sh)
 ### Audit — `/api/v1/audit`
 | GET | `/api/v1/audit` | Query audit logs |
 
+### Auth — `/auth`
+| POST | `/auth/register` | Register with email + password (returns API key) |
+| POST | `/auth/login` | Login with email + password (returns API key) |
+
 ### Infrastructure
 | GET | `/health` | Health check (DB + Redis) |
 | GET | `/metrics` | Prometheus metrics |
@@ -368,10 +385,13 @@ SDK runs task locally → POST /api/v1/tasks/ingest (PokantTracker)
 ```
 
 ### Authentication
-- API keys stored as SHA-256 hashes in `api_keys` table (raw key never stored)
+- **API keys:** SHA-256 hashed in `api_keys` table (raw key never stored)
+- **Email+password:** PBKDF2-SHA256 (600k iterations), `password_hash` on `accounts` table
+- **Dual header support:** `X-API-Key` and `Authorization: Bearer` both accepted
 - `SET LOCAL app.account_id` on each DB connection for Postgres RLS
 - All routes use `get_current_account` FastAPI dependency
-- Dashboard: login not required (auth guard removed for local dev)
+- Registration: `POST /auth/register` → creates account + API key, returns `cu_live_*` key
+- Login: `POST /auth/login` → verifies password, returns existing API key
 
 ### Tier System
 Defined in `shared/constants.py`. Queues: `tasks:free`, `tasks:startup`, `tasks:enterprise`.
@@ -443,7 +463,7 @@ Categories in `workers/error_classifier.py` and `sdk/computeruse/error_classifie
 
 | Table | Purpose |
 |-------|---------|
-| `accounts` | User accounts (tier, monthly limits, webhook_secret) |
+| `accounts` | User accounts (tier, monthly limits, webhook_secret, email, password_hash) |
 | `api_keys` | Hashed API keys (SHA-256) |
 | `tasks` | Task records (status, result, cost, executor_mode, analysis_json, compiled_workflow, playwright_script) |
 | `task_steps` | Step data (action, screenshot, timing, context JSONB) |
@@ -464,6 +484,7 @@ Categories in `workers/error_classifier.py` and `sdk/computeruse/error_classifie
 10. `010_task_analysis_json.sql` — analysis_json JSONB column on tasks
 11. `011_task_compiled_workflow.sql` — compiled_workflow JSONB column on tasks
 12. `012_task_playwright_script.sql` — playwright_script TEXT column on tasks
+13. `013_account_password.sql` — password_hash VARCHAR(255) on accounts
 
 ## SDK Public API (v0.2.0)
 
@@ -524,6 +545,7 @@ Expanded from 18 → 34: includes browser actions, desktop actions, observe acti
 | `/sessions` | Browser session management (drawer) |
 | `/scripts` | Compiled workflow script viewer |
 | `/settings` | API keys CRUD, billing |
+| `/contact` | Enterprise contact form (Formspree) |
 | `/login` | Authentication |
 
 ## Environment Variables
@@ -600,11 +622,13 @@ Volumes: `pgdata`, `dashboard_node_modules`, `dashboard_next`, `replays`
 |------|---------|
 | `api/main.py` | FastAPI app, middleware stack, health + metrics |
 | `api/config.py` | `Settings` (pydantic-settings); all env vars |
-| `api/middleware/auth.py` | `get_current_account`; SHA-256 key hashing + RLS |
+| `api/middleware/auth.py` | Dual auth (X-API-Key + Bearer); SHA-256 hashing + RLS |
 | `api/routes/tasks.py` | Task CRUD + ingest + retry + replay |
+| `api/routes/auth.py` | Email+password register/login (PBKDF2-SHA256) |
 | `api/routes/analytics.py` | Fleet health analytics endpoint |
 | `api/routes/alerts.py` | Alert list + acknowledge |
-| `api/services/r2.py` | R2 presigned URL generation |
+| `api/services/r2.py` | R2 presigned URL generation (graceful fallback) |
+| `workers/healthcheck.py` | HTTP health server on port 8001 (Railway probes) |
 | `workers/executor.py` | Core TaskExecutor: browser + LLM loop + screenshots |
 | `workers/browser_manager.py` | Playwright lifecycle + stealth |
 | `workers/stuck_detector.py` | Stuck pattern detection |
@@ -628,7 +652,44 @@ Volumes: `pgdata`, `dashboard_node_modules`, `dashboard_next`, `replays`
 | `shared/constants.py` | TIER_LIMITS, TaskStatus, ErrorCode |
 | `shared/errors.py` | Exception hierarchy |
 | `shared/url_validator.py` | SSRF-safe URL validation |
+| `infra/DEPLOY.md` | Railway deployment guide |
+| `infra/railway.toml` | Railway API service config |
+| `.env.production.template` | Production env vars template |
+| `scripts/verify_production.py` | Post-deploy verification (12 checks) |
+| `scripts/test_cloud_pipeline.py` | End-to-end pipeline test (19 checks) |
 | `tests/conftest.py` | Stubs heavy deps; sets env defaults |
+
+## Deployment
+
+### Production Stack
+- **API + Worker + Cron:** Railway (per-service TOML configs in `infra/`)
+- **Dashboard:** Vercel (Next.js, `dashboard/vercel.json`)
+- **Database:** Supabase PostgreSQL 16 (Session mode pooler, port 5432)
+- **Redis:** Upstash Redis
+- **Browsers:** Browserbase (cloud CDP sessions)
+
+### Railway Services
+| Service | Config | Port | Notes |
+|---------|--------|------|-------|
+| API | `infra/railway.toml` | 8000 | FastAPI + uvicorn |
+| Worker | `infra/railway-worker.toml` | 8001 | Celery + health check server |
+| Cron | `infra/railway-cron.toml` | — | Scheduled tasks |
+| Dashboard | `infra/railway-dashboard.toml` | 3000 | Next.js (alt to Vercel) |
+
+### SSL/TLS for Remote Postgres
+- `api/db/engine.py` and `workers/db.py` auto-detect remote connections
+- Adds `sslmode=require` with hostname verification disabled (for Supabase self-signed certs)
+- Supabase requires Session mode pooler (port 5432), NOT Transaction mode (port 6543), because `SET LOCAL` for RLS needs session persistence
+
+### R2 Storage Graceful Fallback
+- `is_r2_configured()` validates credentials AND tests `boto3.client()` construction
+- Result is cached after first call (module-level singleton)
+- When R2 is unconfigured: replays/screenshots saved to local filesystem
+- All upload paths have try/except safety nets around `boto3.client()` creation
+
+### Verification Scripts
+- `scripts/verify_production.py` — 12-check post-deploy verification
+- `scripts/test_cloud_pipeline.py` — 19-check end-to-end pipeline test
 
 ## Workflow Orchestration
 
