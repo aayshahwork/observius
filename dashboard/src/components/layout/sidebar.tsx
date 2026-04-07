@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, HeartPulse, ListTodo, FileCode2, Key, BarChart3, Settings, Sun, Moon, Monitor } from "lucide-react";
+import { LayoutDashboard, HeartPulse, ListTodo, FileCode2, Key, BarChart3, Settings, Sun, Moon, Monitor, LogOut } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { useTheme } from "@/contexts/theme-context";
+import { useAuth } from "@/contexts/auth-context";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -20,6 +21,7 @@ const navItems = [
 export function Sidebar({ className }: { className?: string }) {
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
+  const { logout } = useAuth();
 
   const cycleTheme = () => {
     const next = theme === "light" ? "dark" : theme === "dark" ? "system" : "light";
@@ -72,6 +74,13 @@ export function Sidebar({ className }: { className?: string }) {
         >
           <ThemeIcon className="size-4" />
           {theme === "light" ? "Light" : theme === "dark" ? "Dark" : "System"}
+        </button>
+        <button
+          onClick={logout}
+          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+        >
+          <LogOut className="size-4" />
+          Log out
         </button>
       </div>
     </aside>

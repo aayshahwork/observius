@@ -29,6 +29,7 @@ class Account(Base):
     monthly_steps_used: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     encryption_key_id: Mapped[str] = mapped_column(String, nullable=False)
     webhook_secret: Mapped[str | None] = mapped_column(String(64))
+    password_hash: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime | None] = mapped_column(server_default=text("now()"))
 
     # Relationships

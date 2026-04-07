@@ -16,20 +16,49 @@ import {
 } from "@/components/ui/card";
 import { KeyRound } from "lucide-react";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 export default function LoginPage() {
-  const [key, setKey] = useState("");
-  const { apiKey, login } = useAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const { apiKey, isLoading, login } = useAuth();
   const router = useRouter();
 
-  // Navigate after apiKey state is committed
+  // Redirect already-authenticated users
   useEffect(() => {
-    if (apiKey) router.replace("/tasks");
-  }, [apiKey, router]);
+    if (!isLoading && apiKey) router.replace("/tasks");
+  }, [apiKey, isLoading, router]);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!key.trim()) return;
-    login(key.trim());
+    if (!email.trim() || !password) return;
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const res = await fetch(`${API_URL}/api/v1/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        const msg = data?.detail?.message || data?.detail || "Login failed";
+        setError(typeof msg === "string" ? msg : "Invalid email or password.");
+        return;
+      }
+
+      login(data.api_key);
+    } catch {
+      setError("Could not connect to the API. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -38,36 +67,54 @@ export default function LoginPage() {
         <div className="mx-auto mb-2 flex size-10 items-center justify-center rounded-lg bg-primary/10">
           <KeyRound className="size-5 text-primary" />
         </div>
-        <CardTitle>Pokant</CardTitle>
+        <CardTitle>Welcome back</CardTitle>
         <CardDescription>
-          Enter your API key to access the dashboard
+          Sign in to your Pokant account
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="api-key">API Key</Label>
+            <Label htmlFor="email">Email</Label>
             <Input
-              id="api-key"
-              type="password"
-              placeholder="cu_test_..."
-              value={key}
-              onChange={(e) => setKey(e.target.value)}
+              id="email"
+              type="email"
+              placeholder="dev@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               autoFocus
             />
           </div>
-          <Button type="submit" className="w-full" disabled={!key.trim()}>
-            Continue
+
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
+            <Input
+              id="password"
+              type="password"
+              placeholder="Your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
+
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={!email.trim() || !password || loading}
+          >
+            {loading ? "Signing in..." : "Sign In"}
           </Button>
         </form>
 
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          Need a key?{" "}
+          Need an account?{" "}
           <Link
             href="/signup"
             className="text-primary underline underline-offset-4 hover:text-primary/80"
           >
-            Sign up
+            Sign up free
           </Link>
         </p>
       </CardContent>

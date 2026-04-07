@@ -16,11 +16,12 @@ import {
 } from "@/components/ui/card";
 import { Rocket, Copy, Check, ArrowRight } from "lucide-react";
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function SignupPage() {
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<{
@@ -35,7 +36,17 @@ export default function SignupPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!email.trim()) return;
+    if (!email.trim() || !password) return;
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+
     setLoading(true);
     setError("");
 
@@ -43,7 +54,7 @@ export default function SignupPage() {
       const res = await fetch(`${API_URL}/api/v1/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim() }),
+        body: JSON.stringify({ email: email.trim(), password }),
       });
 
       const data = await res.json();
@@ -112,7 +123,7 @@ export default function SignupPage() {
               </Button>
             </div>
             <p className="text-xs text-warning font-medium">
-              Save this key — you won&apos;t see it again.
+              Save this key — you won&apos;t see it again. Use it with the SDK or retrieve a new one by logging in.
             </p>
           </div>
 
@@ -153,7 +164,7 @@ export default function SignupPage() {
           </Button>
 
           <p className="text-center text-xs text-muted-foreground">
-            Already have a key?{" "}
+            Already have an account?{" "}
             <Link
               href="/login"
               className="text-primary underline underline-offset-4 hover:text-primary/80"
@@ -166,7 +177,7 @@ export default function SignupPage() {
     );
   }
 
-  // --- Default state: email form ---
+  // --- Default state: registration form ---
   return (
     <Card className="w-full max-w-sm">
       <CardHeader className="text-center">
@@ -192,6 +203,28 @@ export default function SignupPage() {
             />
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
+            <Input
+              id="password"
+              type="password"
+              placeholder="At least 8 characters"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="confirm-password">Confirm Password</Label>
+            <Input
+              id="confirm-password"
+              type="password"
+              placeholder="Repeat your password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+            />
+          </div>
+
           {error && (
             <p className="text-sm text-destructive">{error}</p>
           )}
@@ -199,14 +232,14 @@ export default function SignupPage() {
           <Button
             type="submit"
             className="w-full"
-            disabled={!email.trim() || loading}
+            disabled={!email.trim() || !password || !confirmPassword || loading}
           >
             {loading ? "Creating account..." : "Get Started Free"}
           </Button>
         </form>
 
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          Already have a key?{" "}
+          Already have an account?{" "}
           <Link
             href="/login"
             className="text-primary underline underline-offset-4 hover:text-primary/80"

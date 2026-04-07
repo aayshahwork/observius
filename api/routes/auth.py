@@ -1,12 +1,14 @@
 """
-api/routes/auth.py — Self-serve registration endpoint.
+api/routes/auth.py — Registration and login endpoints.
 
-POST /api/v1/auth/register   Create account + API key (no auth required)
+POST /api/v1/auth/register   Create account with email + password
+POST /api/v1/auth/login      Authenticate and return a fresh API key
 """
 
 from __future__ import annotations
 
 import hashlib
+import hmac
 import secrets
 import uuid
 from datetime import datetime
@@ -28,15 +30,69 @@ router = APIRouter(prefix="/api/v1/auth", tags=["Auth"])
 
 
 # ---------------------------------------------------------------------------
+# Password helpers (PBKDF2-SHA256, 600k iterations)
+# ---------------------------------------------------------------------------
+
+_ITERATIONS = 600_000
+
+
+def _hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    key = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), _ITERATIONS)
+    return f"pbkdf2_sha256${_ITERATIONS}${salt}${key.hex()}"
+
+
+def _verify_password(password: str, stored: str) -> bool:
+    try:
+        _, iter_str, salt, stored_hex = stored.split("$", 3)
+        key = hashlib.pbkdf2_hmac(
+            "sha256", password.encode(), salt.encode(), int(iter_str)
+        )
+        return hmac.compare_digest(key.hex(), stored_hex)
+    except Exception:
+        return False
+
+
+def _make_api_key(account_id: uuid.UUID, label: str) -> tuple[str, ApiKey]:
+    """Generate a new API key. Returns (raw_key, ApiKey model)."""
+    raw_key = f"cu_live_{secrets.token_hex(16)}"
+    key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+    api_key = ApiKey(
+        id=uuid.uuid4(),
+        account_id=account_id,
+        key_hash=key_hash,
+        key_prefix=raw_key[:8],
+        key_suffix=raw_key[-4:],
+        label=label,
+        created_at=datetime.utcnow(),
+    )
+    return raw_key, api_key
+
+
+# ---------------------------------------------------------------------------
 # Schemas
 # ---------------------------------------------------------------------------
 
 class RegisterRequest(BaseModel):
     email: str = Field(..., min_length=3, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    password: str = Field(..., min_length=8)
     name: str = ""
 
 
 class RegisterResponse(BaseModel):
+    account_id: str
+    email: str
+    api_key: str
+    tier: str
+    monthly_step_limit: int
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(..., min_length=3)
+    password: str = Field(..., min_length=1)
+
+
+class LoginResponse(BaseModel):
     account_id: str
     email: str
     api_key: str
@@ -58,11 +114,7 @@ async def register(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> RegisterResponse:
-    """Create a new account on the free tier and return an API key.
-
-    The raw API key is returned exactly once — it is never stored.
-    """
-    # Check for duplicate email
+    """Create a new account on the free tier and return an API key (shown once)."""
     existing = await db.execute(
         select(Account.id).where(Account.email == body.email)
     )
@@ -75,7 +127,6 @@ async def register(
             },
         )
 
-    # Create account
     account_id = uuid.uuid4()
     account = Account(
         id=account_id,
@@ -85,22 +136,11 @@ async def register(
         monthly_step_limit=TIER_STEP_LIMITS["free"],
         monthly_steps_used=0,
         encryption_key_id=f"enc_{uuid.uuid4().hex[:16]}",
+        password_hash=_hash_password(body.password),
     )
     db.add(account)
 
-    # Generate API key: cu_live_ + 32 hex chars
-    raw_key = f"cu_live_{secrets.token_hex(16)}"
-    key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
-
-    api_key = ApiKey(
-        id=uuid.uuid4(),
-        account_id=account_id,
-        key_hash=key_hash,
-        key_prefix=raw_key[:8],
-        key_suffix=raw_key[-4:],
-        label="Default key",
-        created_at=datetime.utcnow(),
-    )
+    raw_key, api_key = _make_api_key(account_id, "Default key")
     db.add(api_key)
 
     await db.commit()
@@ -118,4 +158,58 @@ async def register(
         api_key=raw_key,
         tier="free",
         monthly_step_limit=TIER_STEP_LIMITS["free"],
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/auth/login
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/login",
+    response_model=LoginResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def login(
+    body: LoginRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> LoginResponse:
+    """Authenticate with email + password and receive a fresh API key."""
+    result = await db.execute(
+        select(Account).where(Account.email == body.email)
+    )
+    account = result.scalar_one_or_none()
+
+    # Always run verify to avoid timing-based email enumeration
+    dummy_hash = f"pbkdf2_sha256${_ITERATIONS}${'0' * 32}${'0' * 64}"
+    stored_hash = account.password_hash if (account and account.password_hash) else dummy_hash
+    valid = _verify_password(body.password, stored_hash)
+
+    if not account or not valid:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error_code": "INVALID_CREDENTIALS",
+                "message": "Invalid email or password.",
+            },
+        )
+
+    raw_key, api_key = _make_api_key(account.id, "Dashboard login")
+    db.add(api_key)
+    await db.commit()
+
+    logger.info(
+        "account_login",
+        account_id=str(account.id),
+        email=account.email,
+        ip=request.client.host if request.client else None,
+    )
+
+    return LoginResponse(
+        account_id=str(account.id),
+        email=account.email,
+        api_key=raw_key,
+        tier=account.tier or "free",
+        monthly_step_limit=account.monthly_step_limit,
     )
