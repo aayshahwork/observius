@@ -48,6 +48,63 @@ print(result.result)
 
 ---
 
+## Cloud API
+
+Send browser automation tasks to our hosted API — no local browser or Playwright install needed.
+
+### Quick Start
+
+1. Sign up at [pokant.live/signup](https://pokant.live/signup) to get a free API key (500 steps/month)
+2. Send a task:
+
+```bash
+curl -X POST https://pokant.live/api/v1/tasks \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -d '{
+    "url": "https://news.ycombinator.com",
+    "task": "Get the top 5 posts with title, points, and link",
+    "output_schema": {"posts": [{"title": "str", "points": "int", "link": "str"}]}
+  }'
+```
+
+3. Check the result in your [dashboard](https://pokant.live/tasks)
+
+### Python
+
+```python
+import httpx
+
+response = httpx.post(
+    "https://pokant.live/api/v1/tasks",
+    headers={"X-API-Key": "YOUR_API_KEY"},
+    json={
+        "url": "https://news.ycombinator.com",
+        "task": "Get the top 5 posts with title, points, and link",
+        "output_schema": {"posts": [{"title": "str", "points": "int", "link": "str"}]},
+    },
+)
+task = response.json()
+print(f"Task ID: {task['id']}, Status: {task['status']}")
+```
+
+Or use the SDK in cloud mode — no local browser required:
+
+```python
+cu = ComputerUse(local=False, api_key="YOUR_API_KEY")
+result = cu.run_task(url="https://example.com", task="Extract the page title")
+```
+
+### Dashboard
+
+Monitor tasks, view step-by-step replays, and track usage at [pokant.live/tasks](https://pokant.live/tasks).
+
+### Enterprise
+
+Need higher limits, dedicated infrastructure, or an SLA? [Contact us](https://pokant.live/contact).
+
+---
+
 ## What This Is
 
 Building a browser automation agent from scratch means stitching together at least five separate concerns: a browser driver (Playwright or Puppeteer), an LLM for navigation decisions, retry and error-recovery logic, structured output parsing and validation, and some kind of replay or observability layer. Each piece has its own failure modes. Most teams spend more time on infrastructure than on the actual task logic.

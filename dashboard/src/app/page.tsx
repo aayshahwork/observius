@@ -8,6 +8,7 @@ const tiers = [
     steps: "500",
     features: ["1 concurrent task", "50 steps per task", "Community support"],
     cta: "Get Started Free",
+    ctaHref: "/signup",
     highlight: false,
   },
   {
@@ -22,6 +23,7 @@ const tiers = [
       "Email support",
     ],
     cta: "Get Started",
+    ctaHref: "/signup",
     highlight: true,
   },
   {
@@ -36,6 +38,7 @@ const tiers = [
       "Priority support",
     ],
     cta: "Get Started",
+    ctaHref: "/signup",
     highlight: false,
   },
   {
@@ -51,6 +54,7 @@ const tiers = [
       "SLA guarantee",
     ],
     cta: "Contact Us",
+    ctaHref: "/contact",
     highlight: false,
   },
 ];
@@ -61,9 +65,12 @@ export default function LandingPage() {
       {/* Nav */}
       <nav className="border-b border-border/50">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-6">
-          <span className="text-sm font-semibold tracking-tight">
-            Observius
-          </span>
+          <Link
+            href="/"
+            className="text-sm font-semibold tracking-tight hover:opacity-80 transition-opacity"
+          >
+            Pokant
+          </Link>
           <div className="flex items-center gap-3">
             <Link
               href="/login"
@@ -100,7 +107,7 @@ export default function LandingPage() {
               Get Started Free
             </Link>
             <a
-              href="https://github.com/aayshahwork/observius"
+              href="https://github.com/aayshahwork/pokant"
               target="_blank"
               rel="noopener noreferrer"
               className="rounded-lg border border-border bg-card px-5 py-2.5 text-sm font-medium hover:bg-muted transition-colors"
@@ -233,7 +240,7 @@ export default function LandingPage() {
                   ))}
                 </ul>
                 <Link
-                  href="/signup"
+                  href={tier.ctaHref}
                   className={`mt-5 block rounded-lg py-2 text-center text-sm font-medium transition-colors ${
                     tier.highlight
                       ? "bg-brand text-brand-foreground hover:bg-brand/90"
@@ -254,7 +261,7 @@ export default function LandingPage() {
           <p className="text-center text-sm text-muted-foreground">
             Built by Aayush &amp; Avi. Open source on{" "}
             <a
-              href="https://github.com/aayshahwork/observius"
+              href="https://github.com/aayshahwork/pokant"
               target="_blank"
               rel="noopener noreferrer"
               className="underline underline-offset-4 hover:text-foreground"
