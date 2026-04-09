@@ -97,6 +97,11 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
       - INTERNAL_API_URL=http://api:8000
+      # Disable login for local development. The seed API key (002_seed_data.sql)
+      # is injected automatically so the dashboard works without logging in.
+      # On Vercel these vars are not set, so auth remains enforced.
+      - DISABLE_AUTH=true
+      - DEFAULT_API_KEY=cu_test_testkey1234567890abcdef12
     volumes:
       - ./dashboard:/app
       - dashboard_node_modules:/app/node_modules
