@@ -47,13 +47,16 @@ async def retry_with_backoff(
     Returns the result of *fn* on success.  Re-raises the last exception
     after all retries are exhausted.
     """
-    is_async = inspect.iscoroutinefunction(fn)
     last_exc: BaseException | None = None
 
     for attempt in range(max_retries + 1):
         try:
             result = fn(*args, **kwargs)
-            if is_async:
+            # Use isawaitable instead of iscoroutinefunction: the
+            # Anthropic SDK's beta accessor chain (__getattr__) wraps
+            # async methods in a way that iscoroutinefunction misses,
+            # leaving coroutines silently unawaited.
+            if inspect.isawaitable(result):
                 result = await result
             return result
         except retriable_exceptions as exc:
