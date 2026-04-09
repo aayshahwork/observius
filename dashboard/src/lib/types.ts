@@ -290,6 +290,8 @@ export interface RetryStatsResponse {
   total_retried: number;
   retry_success_rate: number;
   avg_attempts: number;
+  category_counts?: Record<string, number>;
+  total_diagnosis_cost_cents?: number;
 }
 
 export interface AlertSummary {

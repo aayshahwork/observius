@@ -202,6 +202,17 @@ class TaskExecutor:
         self._stuck_detector = StuckDetector()
         self._output_validator = OutputValidator()
 
+        # Budget monitor — only active when max_cost_cents is configured
+        self._budget_monitor = None
+        if config.max_cost_cents:
+            try:
+                from computeruse.budget import BudgetMonitor
+                self._budget_monitor = BudgetMonitor(
+                    max_cost_cents=float(config.max_cost_cents)
+                )
+            except ImportError:
+                pass
+
     async def execute(self) -> TaskResult:
         """Execute the task end-to-end.
 
@@ -669,6 +680,19 @@ class TaskExecutor:
                     if step_dur is not None:
                         step.duration_ms = int(step_dur * 1000)
 
+            # Intent enrichment — pure Python, no page access, runs on all steps
+            try:
+                from workers.intelligence import enrich_step_context
+                for step in self.steps:
+                    if step.context is None:
+                        ctx = enrich_step_context(
+                            str(step.action_type), step.description or ""
+                        )
+                        if ctx:
+                            step.context = ctx
+            except Exception as enrich_exc:
+                logger.debug("Step intent enrichment failed: %s", enrich_exc)
+
         except Exception as e:
             logger.warning("Failed to enrich steps from browser_use history: %s", e)
 
@@ -1024,6 +1048,15 @@ class TaskExecutor:
             step_tokens_out = getattr(response.usage, "output_tokens", 0)
             total_tokens_in += step_tokens_in
             total_tokens_out += step_tokens_out
+
+            # -- Budget enforcement --
+            if self._budget_monitor is not None:
+                try:
+                    from computeruse.budget import BudgetExceededError
+                    self._budget_monitor.record_step_cost(step_tokens_in, step_tokens_out)
+                except Exception as budget_exc:
+                    logger.warning("Budget limit reached at native step %d: %s", step_num, budget_exc)
+                    break
 
             # -- Append assistant response --
             messages.append({"role": "assistant", "content": response.content})

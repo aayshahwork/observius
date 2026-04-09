@@ -44,6 +44,8 @@ class RetryStats(BaseModel):
     total_retried: int
     retry_success_rate: float
     avg_attempts: float
+    category_counts: dict[str, int] | None = None
+    total_diagnosis_cost_cents: float | None = None
 
 
 class AlertSummary(BaseModel):

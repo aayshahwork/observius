@@ -53,6 +53,7 @@ class StepData:
     duration_ms: int = 0
     success: bool = True
     error: Optional[str] = None
+    context: Optional[Dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         if len(self.description) > 500:

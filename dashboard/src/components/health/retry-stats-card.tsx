@@ -28,7 +28,7 @@ export function RetryStatsCard({ data }: RetryStatsCardProps) {
         </div>
       </CardHeader>
       <CardContent className="pt-0">
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-4 gap-4">
           <div>
             <div className="text-2xl font-bold tabular-nums">
               {data.total_retried}
@@ -49,7 +49,56 @@ export function RetryStatsCard({ data }: RetryStatsCardProps) {
             </div>
             <div className="text-xs text-muted-foreground">Avg attempts</div>
           </div>
+          <div>
+            <div className="text-2xl font-bold tabular-nums">
+              ${((data.total_diagnosis_cost_cents ?? 0) / 100).toFixed(2)}
+            </div>
+            <div className="text-xs text-muted-foreground">Diagnosis cost</div>
+          </div>
         </div>
+
+        {data.category_counts && Object.keys(data.category_counts).length > 0 && (
+          <div className="mt-4 space-y-2">
+            <h4 className="text-sm font-medium">Failure Categories</h4>
+            {Object.entries(data.category_counts)
+              .sort(([, a], [, b]) => b - a)
+              .map(([category, count]) => {
+                const total = Object.values(data.category_counts!).reduce((s, v) => s + v, 0);
+                const pct = (count / total) * 100;
+                const colors: Record<string, string> = {
+                  element_interaction: "bg-yellow-500",
+                  navigation: "bg-blue-500",
+                  anti_bot: "bg-red-500",
+                  authentication: "bg-purple-500",
+                  content_mismatch: "bg-orange-500",
+                  agent_loop: "bg-pink-500",
+                  agent_reasoning: "bg-indigo-500",
+                  infrastructure: "bg-gray-500",
+                  transient_llm: "bg-sky-500",
+                  rate_limited: "bg-amber-500",
+                  transient_network: "bg-teal-500",
+                  transient_browser: "bg-cyan-500",
+                  permanent_llm: "bg-rose-500",
+                  permanent_browser: "bg-red-700",
+                  permanent_task: "bg-red-900",
+                };
+                return (
+                  <div key={category} className="flex items-center gap-2 text-xs">
+                    <span className="w-32 truncate text-muted-foreground">
+                      {category.replace(/_/g, " ")}
+                    </span>
+                    <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className={cn("h-full rounded-full", colors[category] ?? "bg-gray-500")}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <span className="w-8 text-right text-muted-foreground">{count}</span>
+                  </div>
+                );
+              })}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

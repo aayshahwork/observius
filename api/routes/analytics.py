@@ -212,10 +212,37 @@ async def get_health_analytics(
             params,
         )
     ).mappings().one()
+
+    # 7b. Category breakdown + diagnosis cost from analysis_json ----------
+    category_counts: dict[str, int] = {}
+    total_diagnosis_cost_cents: float = 0.0
+    for r in await db.execute(
+        text("""
+            SELECT
+                error_category,
+                analysis_json -> 'wasted_cost_cents' AS diag_cost
+            FROM tasks
+            WHERE account_id = :account_id
+              AND created_at >= :cutoff
+              AND error_category IS NOT NULL
+        """),
+        params,
+    ):
+        cat = r.error_category
+        if cat:
+            category_counts[cat] = category_counts.get(cat, 0) + 1
+        if r.diag_cost is not None:
+            try:
+                total_diagnosis_cost_cents += float(r.diag_cost)
+            except (TypeError, ValueError):
+                pass
+
     retry_stats = RetryStats(
         total_retried=retry_row["total_retried"],
         retry_success_rate=round(retry_row["retry_success_rate"] or 0.0, 4),
         avg_attempts=round(retry_row["avg_attempts"], 2),
+        category_counts=category_counts or None,
+        total_diagnosis_cost_cents=round(total_diagnosis_cost_cents, 4) if total_diagnosis_cost_cents else None,
     )
 
     # 8. Alerts — graceful degradation if table doesn't exist -------------

@@ -212,6 +212,8 @@ def execute_task(self, task_id: str, task_config_json: str) -> None:
                     classified.category,
                     config_dict,
                     classified.retry_after_seconds,
+                    step_data=task_result.step_data,
+                    error_message=task_result.error,
                 )
             except Exception:
                 logger.warning(
@@ -231,6 +233,8 @@ def execute_task(self, task_id: str, task_config_json: str) -> None:
                 classified.category,
                 config_dict,
                 classified.retry_after_seconds,
+                step_data=shared_steps,
+                error_message=str(exc),
             )
         except Exception:
             logger.warning("Auto-retry evaluation failed for task %s", task_id)
@@ -299,6 +303,7 @@ def _persist_result(task_id: str, result: Any, config_dict: dict) -> None:
                 duration_ms=step.duration_ms,
                 success=step.success,
                 error_message=step.error,
+                context=step.context,
             )
             session.add(task_step)
 
@@ -368,8 +373,14 @@ def _maybe_auto_retry(
     error_category: str,
     config_dict: dict,
     retry_after_seconds: int | None = None,
+    step_data: list | None = None,
+    error_message: str | None = None,
 ) -> None:
     """Auto-retry a failed task if the error is transient and retries remain.
+
+    Runs failure analysis to diagnose the root cause, builds a recovery plan
+    to guide the next attempt, and threads retry_memory through config_dict so
+    each retry attempt knows what previous attempts tried.
 
     Creates a new task row (flat retry chain via retry_of_task_id) and
     enqueues it to Celery with a backoff delay.
@@ -385,10 +396,45 @@ def _maybe_auto_retry(
         if task is None:
             return
 
-        # Persist error category on the failed task
+        # ── Failure analysis ───────────────────────────────────────────────
+        # Runs before committing error_category so both are saved in one shot.
+        retry_memory_list: list[dict] = list(config_dict.get("retry_memory", []))
+        attempt_number = (task.retry_count or 0) + 1
+        diagnosis_dict: dict | None = None
+        recovery_dict: dict | None = None
+
+        try:
+            from workers.intelligence import (
+                build_analysis_json,
+                plan_recovery,
+                run_failure_analysis,
+            )
+
+            diagnosis_dict = run_failure_analysis(
+                task_description=config_dict.get("task", task.task_description or ""),
+                steps=step_data or [],
+                error=error_message or task.error_message or "",
+                error_category=error_category,
+                api_key=worker_settings.ANTHROPIC_API_KEY,
+                max_steps=config_dict.get("max_steps"),
+            )
+
+            if diagnosis_dict:
+                task.analysis_json = build_analysis_json(
+                    diagnosis_dict=diagnosis_dict,
+                    step_data=step_data,
+                    attempt_number=attempt_number,
+                    retry_memory_list=retry_memory_list,
+                )
+
+        except Exception:
+            logger.warning("Failure analysis failed for task %s", task_id, exc_info=True)
+
+        # Persist error category + analysis_json in one commit
         task.error_category = error_category
         session.commit()
 
+        # ── Retry policy decision ──────────────────────────────────────────
         max_retries = config_dict.get("retry_attempts", 3)
         base_delay = config_dict.get("retry_delay_seconds", 2)
 
@@ -406,12 +452,67 @@ def _maybe_auto_retry(
             )
             return
 
-        # Determine queue from account tier
+        # ── Recovery planning ──────────────────────────────────────────────
+        countdown = decision.delay_seconds
+        new_config_dict = dict(config_dict)
+
+        if diagnosis_dict:
+            try:
+                recovery_dict = plan_recovery(
+                    original_task=config_dict.get("task", task.task_description or ""),
+                    diagnosis_dict=diagnosis_dict,
+                    attempt_number=attempt_number,
+                    max_attempts=max_retries + 1,
+                    memory_list=retry_memory_list,
+                )
+
+                if recovery_dict and not recovery_dict.get("should_retry", True):
+                    logger.info(
+                        "Recovery plan suppressed retry for task %s (category: %s)",
+                        task_id, diagnosis_dict.get("category"),
+                    )
+                    return
+
+                if recovery_dict:
+                    # Apply modified task description if the recovery plan rewrote it
+                    modified_task = recovery_dict.get("modified_task", "")
+                    if modified_task:
+                        new_config_dict["task"] = modified_task
+
+                    # Use the longer of the two wait times
+                    plan_wait = int(recovery_dict.get("wait_seconds", 0))
+                    if plan_wait > countdown:
+                        countdown = plan_wait
+
+            except Exception:
+                logger.warning("Recovery planning failed for task %s", task_id, exc_info=True)
+
+            # Append this attempt to retry_memory (cap at 3 entries)
+            try:
+                attempt_record = {
+                    "attempt_number": attempt_number,
+                    "category": diagnosis_dict.get("category", "unknown"),
+                    "root_cause": diagnosis_dict.get("root_cause", ""),
+                    "retry_hint": diagnosis_dict.get("retry_hint", ""),
+                    "progress_achieved": diagnosis_dict.get("progress_achieved", ""),
+                    "failed_actions": [
+                        s.description for s in (step_data or [])
+                        if not getattr(s, "success", True) and s.description
+                    ],
+                    "cost_cents": diagnosis_dict.get("analysis_cost_cents", 0.0),
+                    "analysis_method": diagnosis_dict.get("analysis_method", "rule_based"),
+                }
+                new_memory = retry_memory_list + [attempt_record]
+                new_config_dict["retry_memory"] = new_memory[-3:]  # keep last 3
+            except Exception:
+                logger.warning("Failed to build retry_memory for task %s", task_id)
+
+        # ── Determine queue from account tier ──────────────────────────────
         account = session.get(Account, task.account_id)
         tier = account.tier if account else "free"
         queue = f"tasks:{tier}"
 
-        # Create retry task row (flat chain)
+        # ── Create retry task row (flat chain) ─────────────────────────────
         new_task_id = uuid.uuid4()
         new_task = Task(
             id=new_task_id,
@@ -430,22 +531,23 @@ def _maybe_auto_retry(
         session.add(new_task)
         session.commit()
 
-        # Enqueue with backoff delay
+        # Enqueue with backoff delay (or recovery-plan wait, whichever is longer)
         celery_app.send_task(
             "computeruse.execute_task",
-            args=[str(new_task_id), json.dumps(config_dict)],
+            args=[str(new_task_id), json.dumps(new_config_dict)],
             queue=queue,
             task_id=str(new_task_id),
-            countdown=decision.delay_seconds,
+            countdown=countdown,
         )
 
         logger.info(
-            "Auto-retry task %s -> %s (attempt %d, delay %ds: %s)",
+            "Auto-retry task %s -> %s (attempt %d, delay %ds: %s, category: %s)",
             task_id,
             str(new_task_id),
             new_task.retry_count,
-            decision.delay_seconds,
+            countdown,
             decision.reason,
+            diagnosis_dict.get("category", "unknown") if diagnosis_dict else error_category,
         )
     except Exception:
         session.rollback()

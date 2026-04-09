@@ -70,3 +70,4 @@ demo_short.py
 test_demo.py
 sdk/run_demo.py
 .observius/
+.vercel

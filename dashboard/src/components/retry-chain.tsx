@@ -112,7 +112,8 @@ function AttemptCard({
             p.stealth_mode ||
             p.clear_cookies ||
             p.increase_timeout ||
-            p.reduce_max_actions) && (
+            p.reduce_max_actions ||
+            p.extend_system_message) && (
             <div className="flex flex-wrap gap-1">
               {p.fresh_browser && (
                 <Badge variant="outline" className="text-[9px]">
@@ -140,6 +141,11 @@ function AttemptCard({
               {p.reduce_max_actions && (
                 <Badge variant="outline" className="text-[9px]">
                   deliberate mode
+                </Badge>
+              )}
+              {p.extend_system_message && (
+                <Badge variant="outline" className="text-[9px] bg-blue-500/10 text-blue-400 border-blue-500/20">
+                  system prompt modified
                 </Badge>
               )}
             </div>
@@ -351,6 +357,14 @@ export function RetryChain({ task, client }: RetryChainProps) {
               {diagCost > 0 && (
                 <span>Diagnosis: {formatCost(diagCost)}</span>
               )}
+              {(() => {
+                const savedRetries = Math.max(0, inlineAttempts.filter(a => a.status === "failed").length - 1);
+                return savedRetries > 0 ? (
+                  <span>
+                    Est. savings: ~${(savedRetries * 0.19).toFixed(2)} ({savedRetries} prevented blind {savedRetries === 1 ? "retry" : "retries"})
+                  </span>
+                ) : null;
+              })()}
               {recovered && (
                 <Badge
                   variant="secondary"

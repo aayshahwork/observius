@@ -197,6 +197,29 @@ function StepContext({ context }: { context: Record<string, unknown> }) {
     );
   }
 
+  if (type === "enrichment") {
+    const intent = context.intent as string | undefined;
+    const intentDetail = context.intent_detail as string | undefined;
+    if (!intent) return null;
+    return (
+      <div>
+        <p className="text-xs font-medium text-muted-foreground mb-1">Intent</p>
+        <div className="rounded-md border bg-muted/50 px-3 py-2 space-y-1">
+          <div className="flex items-baseline gap-2">
+            <span className="text-xs text-muted-foreground">Action</span>
+            <span className="text-sm font-medium capitalize">{intent.replace(/_/g, " ")}</span>
+          </div>
+          {intentDetail && (
+            <div className="flex items-baseline gap-2">
+              <span className="text-xs text-muted-foreground">Detail</span>
+              <span className="text-sm text-muted-foreground">{intentDetail}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   if (type === "api_call") {
     const method = context.method as string | undefined;
     const url = context.url as string | undefined;
