@@ -16,7 +16,7 @@ export type ErrorCategory =
   | "permanent_task"
   | "unknown";
 
-export type ExecutorMode = "browser_use" | "native" | "sdk";
+export type ExecutorMode = "browser_use" | "native" | "sdk" | "skyvern";
 
 export interface AnalysisFinding {
   tier: number;
@@ -151,6 +151,9 @@ export interface TaskCreateRequest {
   webhook_url?: string;
   max_cost_cents?: number;
   executor_mode?: ExecutorMode;
+  skyvern_engine?: string;
+  proxy_location?: string;
+  data_extraction_schema?: Record<string, unknown>;
 }
 
 export interface SessionResponse {
@@ -284,6 +287,7 @@ export interface ExecutorBreakdown {
   browser_use: ExecutorStatsResponse;
   native: ExecutorStatsResponse;
   sdk: ExecutorStatsResponse;
+  skyvern?: ExecutorStatsResponse;
 }
 
 export interface RetryStatsResponse {

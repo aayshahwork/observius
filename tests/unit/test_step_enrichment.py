@@ -377,94 +377,66 @@ class TestTaskResultTokenTotals:
 
 
 class TestExecuteWithEnrichment:
-    async def test_execute_populates_tokens_and_cost(self):
-        mock_browser_manager = AsyncMock()
-        mock_page = AsyncMock()
-        mock_page.screenshot = AsyncMock(return_value=b"\xff\xd8fake")
-        mock_page.goto = AsyncMock()
-        mock_context = AsyncMock()
-        mock_context.new_page = AsyncMock(return_value=mock_page)
-        mock_browser = AsyncMock()
-        mock_browser.new_context = AsyncMock(return_value=mock_context)
-        mock_browser_manager.get_browser = AsyncMock(return_value=mock_browser)
-        mock_browser_manager.release_browser = AsyncMock()
-        mock_browser_manager.apply_stealth = AsyncMock()
+    """After PAV rewire, execute() delegates to run_pav_loop which handles enrichment."""
 
-        history = [
-            _make_history_entry(input_tokens=1000, output_tokens=200),
-            _make_history_entry(input_tokens=800, output_tokens=150),
-        ]
-        mock_run_result = _make_agent_result(
-            history=history,
-            action_names=["ClickElementAction", "DoneAction"],
-            total_cost=0.012,
-            is_done=True,
+    async def test_execute_populates_tokens_and_cost(self):
+        expected = TaskResult(
+            task_id="enrich-1",
+            status="completed",
+            success=True,
+            total_tokens_in=1800,
+            total_tokens_out=350,
+            cost_cents=1.2,
+            step_data=[
+                StepData(step_number=1, timestamp=datetime.now(timezone.utc),
+                         action_type=ActionType.NAVIGATE, description="Nav", success=True),
+                StepData(step_number=2, timestamp=datetime.now(timezone.utc),
+                         action_type=ActionType.CLICK, description="Click",
+                         tokens_in=1000, tokens_out=200, success=True),
+                StepData(step_number=3, timestamp=datetime.now(timezone.utc),
+                         action_type=ActionType.EXTRACT, description="Done",
+                         tokens_in=800, tokens_out=150, success=True),
+            ],
+            steps=3,
         )
 
-        def make_agent(*args, **kwargs):
-            agent = MagicMock()
-            callback = kwargs.get("register_new_step_callback")
-
-            async def run(*a, **kw):
-                if callback:
-                    callback("click step")
-                    callback("done step")
-                return mock_run_result
-
-            agent.run = run
-            return agent
-
         config = TaskConfig(url="https://example.com", task="Test", max_steps=10)
-        with patch("browser_use.Agent", side_effect=make_agent):
+        with patch("workers.pav.loop.run_pav_loop", new_callable=AsyncMock, return_value=expected):
             executor = TaskExecutor(
                 config=config,
-                browser_manager=mock_browser_manager,
+                browser_manager=AsyncMock(),
                 llm_client=MagicMock(),
             )
             result = await executor.execute()
 
         assert result.success is True
-        assert result.total_tokens_in == 1800  # 1000 + 800
-        assert result.total_tokens_out == 350  # 200 + 150
-        assert result.cost_cents == pytest.approx(1.2)  # $0.012 * 100
+        assert result.total_tokens_in == 1800
+        assert result.total_tokens_out == 350
+        assert result.cost_cents == pytest.approx(1.2)
         assert result.step_data[1].action_type == ActionType.CLICK
         assert result.step_data[2].action_type == ActionType.EXTRACT
         assert result.step_data[1].tokens_in == 1000
         assert result.step_data[2].tokens_in == 800
 
     async def test_execute_graceful_with_empty_history(self):
-        mock_browser_manager = AsyncMock()
-        mock_page = AsyncMock()
-        mock_page.screenshot = AsyncMock(return_value=b"\xff\xd8fake")
-        mock_page.goto = AsyncMock()
-        mock_context = AsyncMock()
-        mock_context.new_page = AsyncMock(return_value=mock_page)
-        mock_browser = AsyncMock()
-        mock_browser.new_context = AsyncMock(return_value=mock_context)
-        mock_browser_manager.get_browser = AsyncMock(return_value=mock_browser)
-        mock_browser_manager.release_browser = AsyncMock()
-        mock_browser_manager.apply_stealth = AsyncMock()
-
-        mock_run_result = MagicMock()
-        mock_run_result.final_result.return_value = None
-
-        def make_agent(*args, **kwargs):
-            agent = MagicMock()
-            async def run(*a, **kw):
-                return mock_run_result
-            agent.run = run
-            return agent
+        expected = TaskResult(
+            task_id="enrich-2",
+            status="completed",
+            success=True,
+            total_tokens_in=0,
+            total_tokens_out=0,
+            steps=1,
+        )
 
         config = TaskConfig(url="https://example.com", task="Test", max_steps=5)
-        with patch("browser_use.Agent", side_effect=make_agent):
+        with patch("workers.pav.loop.run_pav_loop", new_callable=AsyncMock, return_value=expected):
             executor = TaskExecutor(
                 config=config,
-                browser_manager=mock_browser_manager,
+                browser_manager=AsyncMock(),
                 llm_client=MagicMock(),
             )
             result = await executor.execute()
 
-        # Should not crash; tokens/cost default to 0
         assert result.success is True
         assert result.total_tokens_in == 0
         assert result.total_tokens_out == 0

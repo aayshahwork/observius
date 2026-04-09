@@ -54,6 +54,9 @@ class StepData:
     success: bool = True
     error: Optional[str] = None
     context: Optional[Dict[str, Any]] = None
+    validator_verdict: Optional[str] = None
+    failure_class: Optional[str] = None
+    patch_applied: Optional[str] = None
 
     def __post_init__(self) -> None:
         if len(self.description) > 500:
@@ -74,7 +77,12 @@ class TaskConfig:
     retry_delay_seconds: int = 2
     max_cost_cents: Optional[int] = None
     session_id: Optional[str] = None
-    executor_mode: str = "browser_use"  # "browser_use" | "native"
+    executor_mode: str = "browser_use"  # "browser_use" | "native" | "skyvern"
+    # Skyvern-specific fields
+    skyvern_engine: Optional[str] = None
+    skyvern_api_key: Optional[str] = None
+    data_extraction_schema: Optional[Dict[str, Any]] = None
+    proxy_location: Optional[str] = None
 
 
 @dataclass

@@ -1,46 +1,81 @@
-"""Action-related shared types: StepIntent, StepResult, GroundingRung."""
+"""
+workers/shared_types/actions.py — Intent, grounding, and results for each step.
+
+GroundingRung: how confidently the agent identified the target element.
+StepIntent:    what the agent planned to do (before execution).
+StepResult:    what actually happened (after execution).
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any
+from typing import Any, Optional
 
-from workers.shared_types.observations import Observation
+from .observations import Observation
 
 
 class GroundingRung(StrEnum):
-    """Selector strategy used, ordered from most to least preferred."""
+    """Confidence level in how the agent identified its target element.
 
-    ROLE = "role"
-    LABEL = "label"
-    TEXT = "text"
-    TESTID = "testid"
-    CSS_XPATH = "css_xpath"
-    VISION = "vision"
-    COORDINATES = "coordinates"  # raw x,y — used by Anthropic CUA and Skyvern
+    Ordered from most reliable to least reliable. The retry system
+    can suggest moving UP the ladder on re-attempts (e.g., from
+    COORDINATE to CSS_SELECTOR).
+    """
+
+    CSS_SELECTOR = "css_selector"
+    ARIA_LABEL = "aria_label"
+    TEXT_MATCH = "text_match"
+    XPATH = "xpath"
+    COORDINATE = "coordinate"
+    HEURISTIC = "heuristic"
 
 
 @dataclass
 class StepIntent:
-    """What the planner wants the backend to do."""
+    """What the agent planned to do before executing an action.
 
-    action: str  # from existing ActionType enum in workers/models.py
-    target: dict[str, Any]  # locator info: {strategy: "role", role: "button", name: "Submit"} or {x: 100, y: 200}
-    value: str | None = None  # text to type, URL to navigate to, etc.
-    guardrails: list[str] = field(default_factory=list)  # e.g. ["no_purchase", "require_confirmation"]
-    metadata: dict[str, Any] = field(default_factory=dict)
+    Built from the LLM's response. The executor creates a StepIntent
+    before running the action, then pairs it with a StepResult after.
+    """
+
+    action_type: str = ""
+    target_selector: str = ""
+    target_text: str = ""
+    input_value: str = ""
+    grounding: GroundingRung = GroundingRung.HEURISTIC
+    description: str = ""
+    expected_outcome: str = ""
+    url_before: str = ""
+
+    def __post_init__(self) -> None:
+        if len(self.description) > 500:
+            self.description = self.description[:500]
 
 
 @dataclass
 class StepResult:
-    """What the backend returns after executing."""
+    """What actually happened when an action was executed.
 
-    success: bool
-    observation: Observation
-    artifacts: dict[str, Any] = field(default_factory=dict)  # {screenshot_ref, har_ref, trace_ref, video_ref}
-    error: str | None = None
-    error_code: str | None = None  # machine-readable, e.g. "element_not_found"
-    grounding_rung_used: GroundingRung | None = None
+    Created by the executor after running the action described by StepIntent.
+    Pairs 1:1 with a StepIntent to form a complete step record.
+    """
+
+    success: bool = True
+    error: Optional[str] = None
     duration_ms: int = 0
-    raw_backend_output: Any = None  # backend-specific data for debugging
+    tokens_in: int = 0
+    tokens_out: int = 0
+    observation: Optional[Observation] = None
+    verification_passed: Optional[bool] = None
+    side_effects: list[str] = field(default_factory=list)
+
+    @property
+    def cost_cents(self) -> float:
+        """Approximate cost of this step based on Claude Sonnet pricing."""
+        return (self.tokens_in * 3.0 + self.tokens_out * 15.0) / 1_000_000 * 100
+
+    @property
+    def has_observation(self) -> bool:
+        """Whether a post-action observation was captured."""
+        return self.observation is not None

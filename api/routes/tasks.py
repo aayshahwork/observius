@@ -189,6 +189,9 @@ async def create_task(
         "retry_attempts": body.max_retries,
         "retry_delay_seconds": 2,
         "executor_mode": body.executor_mode,
+        "skyvern_engine": body.skyvern_engine,
+        "proxy_location": body.proxy_location,
+        "data_extraction_schema": body.data_extraction_schema,
     })
 
     _celery.send_task(

@@ -4,7 +4,7 @@
  * Covers:
  *  - "Advanced Options" button toggles the section open and closed
  *  - Chevron rotates 180° when open
- *  - Executor mode radios: default is "browser_use", can switch to "native"
+ *  - Execution engine cards: default is "browser_use", can switch to "native" or "skyvern"
  *  - Max cost input accepts numeric values and shows help text
  *  - Form submits with executor_mode and max_cost_cents included in POST body
  *  - Form submits without those fields when advanced section is left at defaults
@@ -43,7 +43,7 @@ test.describe("Advanced Options collapsible", () => {
   }) => {
     await openNewTaskPage(page);
 
-    const advancedContent = page.locator("fieldset").filter({ hasText: "Executor Mode" });
+    const advancedContent = page.locator("fieldset").filter({ hasText: "Execution Engine" });
     await expect(advancedContent).not.toBeVisible();
   });
 
@@ -54,7 +54,7 @@ test.describe("Advanced Options collapsible", () => {
 
     await page.getByRole("button", { name: "Advanced Options" }).click();
 
-    const advancedContent = page.locator("fieldset").filter({ hasText: "Executor Mode" });
+    const advancedContent = page.locator("fieldset").filter({ hasText: "Execution Engine" });
     await expect(advancedContent).toBeVisible();
   });
 
@@ -65,10 +65,10 @@ test.describe("Advanced Options collapsible", () => {
 
     const toggle = page.getByRole("button", { name: "Advanced Options" });
     await toggle.click();
-    await expect(page.locator("fieldset").filter({ hasText: "Executor Mode" })).toBeVisible();
+    await expect(page.locator("fieldset").filter({ hasText: "Execution Engine" })).toBeVisible();
 
     await toggle.click();
-    await expect(page.locator("fieldset").filter({ hasText: "Executor Mode" })).not.toBeVisible();
+    await expect(page.locator("fieldset").filter({ hasText: "Execution Engine" })).not.toBeVisible();
   });
 
   test("chevron SVG rotates to 180° when section is open", async ({
@@ -90,53 +90,53 @@ test.describe("Advanced Options collapsible", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Executor mode radios
+// Execution Engine card selector
 // ---------------------------------------------------------------------------
 
-test.describe("Executor Mode radio buttons", () => {
-  test("'Browser Use (default)' radio is selected by default", async ({
+test.describe("Execution Engine card selector", () => {
+  test("'Browser Use' card is selected by default", async ({
     authedPage: page,
   }) => {
     await openNewTaskPage(page);
     await page.getByRole("button", { name: "Advanced Options" }).click();
 
-    const browserUseRadio = page.getByRole("radio", { name: "Browser Use (default)" });
-    await expect(browserUseRadio).toBeChecked();
+    const buCard = page.getByRole("button", { name: /Browser Use/ });
+    await expect(buCard).toHaveClass(/ring-primary/);
   });
 
-  test("'Native Claude CUA' radio is unchecked by default", async ({
+  test("'Anthropic CUA' card is not selected by default", async ({
     authedPage: page,
   }) => {
     await openNewTaskPage(page);
     await page.getByRole("button", { name: "Advanced Options" }).click();
 
-    const nativeRadio = page.getByRole("radio", { name: "Native Claude CUA" });
-    await expect(nativeRadio).not.toBeChecked();
+    const cuaCard = page.getByRole("button", { name: /Anthropic CUA/ });
+    await expect(cuaCard).not.toHaveClass(/ring-primary/);
   });
 
-  test("selecting 'Native Claude CUA' unchecks 'Browser Use'", async ({
+  test("selecting 'Anthropic CUA' deselects 'Browser Use'", async ({
     authedPage: page,
   }) => {
     await openNewTaskPage(page);
     await page.getByRole("button", { name: "Advanced Options" }).click();
 
-    await page.getByRole("radio", { name: "Native Claude CUA" }).click();
+    await page.getByRole("button", { name: /Anthropic CUA/ }).click();
 
-    await expect(page.getByRole("radio", { name: "Native Claude CUA" })).toBeChecked();
-    await expect(page.getByRole("radio", { name: "Browser Use (default)" })).not.toBeChecked();
+    await expect(page.getByRole("button", { name: /Anthropic CUA/ })).toHaveClass(/ring-primary/);
+    await expect(page.getByRole("button", { name: /Browser Use/ })).not.toHaveClass(/ring-primary/);
   });
 
-  test("switching back to 'Browser Use' re-checks it", async ({
+  test("switching back to 'Browser Use' re-selects it", async ({
     authedPage: page,
   }) => {
     await openNewTaskPage(page);
     await page.getByRole("button", { name: "Advanced Options" }).click();
 
-    await page.getByRole("radio", { name: "Native Claude CUA" }).click();
-    await page.getByRole("radio", { name: "Browser Use (default)" }).click();
+    await page.getByRole("button", { name: /Anthropic CUA/ }).click();
+    await page.getByRole("button", { name: /Browser Use/ }).click();
 
-    await expect(page.getByRole("radio", { name: "Browser Use (default)" })).toBeChecked();
-    await expect(page.getByRole("radio", { name: "Native Claude CUA" })).not.toBeChecked();
+    await expect(page.getByRole("button", { name: /Browser Use/ })).toHaveClass(/ring-primary/);
+    await expect(page.getByRole("button", { name: /Anthropic CUA/ })).not.toHaveClass(/ring-primary/);
   });
 });
 
@@ -179,7 +179,7 @@ test.describe("Max cost input", () => {
 // ---------------------------------------------------------------------------
 
 test.describe("Form submission with advanced fields", () => {
-  test("form submits successfully with native executor selected", async ({
+  test("form submits successfully with Anthropic CUA engine selected", async ({
     authedPage: page,
   }) => {
     await mockTaskCreate(page);
@@ -193,7 +193,7 @@ test.describe("Form submission with advanced fields", () => {
     await page.getByLabel("Task Description *").fill("Extract the heading");
 
     await page.getByRole("button", { name: "Advanced Options" }).click();
-    await page.getByRole("radio", { name: "Native Claude CUA" }).click();
+    await page.getByRole("button", { name: /Anthropic CUA/ }).click();
 
     await page.getByRole("button", { name: "Create Task" }).click();
     // Navigation to task detail proves the POST succeeded

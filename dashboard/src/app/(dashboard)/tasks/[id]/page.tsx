@@ -222,8 +222,19 @@ export default function TaskDetailPage() {
                 <span className="relative inline-flex size-2.5 rounded-full bg-brand" />
               </span>
             )}
-            <Badge variant="outline" className="text-xs font-normal">
-              {task.executor_mode === "native" ? "Native" : task.executor_mode === "sdk" ? "SDK" : "Browser Use"}
+            <Badge
+              variant="outline"
+              className={`text-xs font-medium border ${
+                task.executor_mode === "native"
+                  ? "bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-800"
+                  : task.executor_mode === "skyvern"
+                  ? "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800"
+                  : task.executor_mode === "sdk"
+                  ? "bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800/50 dark:text-gray-400 dark:border-gray-700"
+                  : "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800"
+              }`}
+            >
+              {task.executor_mode === "native" ? "Anthropic CUA" : task.executor_mode === "skyvern" ? "Skyvern" : task.executor_mode === "sdk" ? "SDK" : "Browser Use"}
             </Badge>
           </div>
         </CardHeader>
