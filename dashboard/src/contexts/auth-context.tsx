@@ -26,25 +26,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Ask the server whether auth is required (reads DISABLE_AUTH env var at
-    // runtime, so the same Docker image works differently on Vercel vs locally).
-    fetch("/api/config")
-      .then((r) => r.json())
-      .then(({ requireAuth, defaultApiKey }: { requireAuth: boolean; defaultApiKey: string | null }) => {
-        if (!requireAuth && defaultApiKey) {
-          // Auth disabled (local Docker): inject the default key in memory only,
-          // intentionally NOT persisting to localStorage so no credentials are
-          // left behind if the env var is later removed.
-          setApiKey(defaultApiKey);
-        } else {
-          setApiKey(localStorage.getItem(STORAGE_KEY));
-        }
-      })
-      .catch(() => {
-        // If the config route is unreachable, fall back to localStorage.
-        setApiKey(localStorage.getItem(STORAGE_KEY));
-      })
-      .finally(() => setIsLoading(false));
+    // NEXT_PUBLIC_DISABLE_AUTH is inlined by Next.js at compile time from the
+    // container environment — no network call, no async failure path.
+    // Set to "true" in docker-compose for local dev; leave unset on Vercel.
+    if (process.env.NEXT_PUBLIC_DISABLE_AUTH === "true") {
+      const defaultKey =
+        process.env.NEXT_PUBLIC_DEFAULT_API_KEY ||
+        "cu_test_testkey1234567890abcdef12";
+      setApiKey(defaultKey);
+      setIsLoading(false);
+      return;
+    }
+    setApiKey(localStorage.getItem(STORAGE_KEY));
+    setIsLoading(false);
   }, []);
 
   const login = useCallback((key: string): void => {
