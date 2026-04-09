@@ -158,6 +158,22 @@ class BrowserUseBackend:
         self._step_timestamps = []
         self._last_history = None
 
+        # -- Re-create BrowserSession if the previous agent's BrowserStopEvent
+        # destroyed the CDP connection (reset(force=True) on agent completion).
+        # Without this, subsequent execute_goal() calls fail with
+        # "CDP client not initialized - browser may not be connected yet".
+        from browser_use.browser.session import BrowserSession
+
+        self._browser_session = BrowserSession(
+            headless=self._config.get("headless", True),
+            enable_default_extensions=False,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--disable-dev-shm-usage",
+                "--no-sandbox",
+            ],
+        )
+
         # -- Inject start URL into the goal so the agent navigates there --
         # BrowserSession doesn't create a page until Agent.run(), so we
         # can't page.goto() before the agent starts.  Instead, prepend
