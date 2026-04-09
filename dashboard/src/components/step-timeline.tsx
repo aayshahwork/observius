@@ -22,6 +22,10 @@ import {
   Menu,
   FileInput,
   Save,
+  FileDown,
+  Code,
+  Video,
+  Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -80,6 +84,33 @@ function getActionConfig(actionType: string) {
 function estimateCostCents(tokensIn: number, tokensOut: number): number {
   // claude-sonnet-4-6: $3/1M input, $15/1M output
   return (tokensIn * 3 + tokensOut * 15) / 10_000;
+}
+
+// ---------------------------------------------------------------------------
+// Reliability helpers
+// ---------------------------------------------------------------------------
+
+const FAILURE_CLASS_LABELS: Record<string, string> = {
+  element_not_found: "Element Not Found",
+  auth_required: "Auth Required",
+  captcha_challenge: "Captcha Challenge",
+  navigation_loop: "Navigation Loop",
+  element_obscured: "Element Obscured",
+  network_timeout: "Network Timeout",
+  page_crash: "Page Crash",
+  goal_not_met: "Goal Not Met",
+  policy_violation: "Policy Violation",
+  stuck_state: "Stuck State",
+};
+
+function getFailureLabel(cls: string): string {
+  return FAILURE_CLASS_LABELS[cls] ?? cls.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function getVerdictColor(verdict: string): string {
+  if (verdict === "pass") return "text-green-600 dark:text-green-400";
+  if (verdict.startsWith("fail_")) return "text-red-600 dark:text-red-400";
+  return "text-muted-foreground";
 }
 
 const NON_VISUAL_ACTIONS = new Set(["llm_call", "api_call", "state_snapshot"]);
@@ -432,12 +463,53 @@ export function StepTimeline({ steps, executorMode }: StepTimelineProps) {
                   ))}
                 </div>
               </div>
+
+              {/* Artifact links */}
+              {(step.har_ref || step.trace_ref || step.video_ref) && (
+                <div className="flex items-center gap-2">
+                  {step.har_ref && (
+                    <a
+                      href={step.har_ref}
+                      download
+                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                      title="Download HAR network trace"
+                    >
+                      <FileDown className="size-3.5" />
+                      HAR
+                    </a>
+                  )}
+                  {step.trace_ref && (
+                    <a
+                      href={step.trace_ref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                      title="Open Playwright trace"
+                    >
+                      <Code className="size-3.5" />
+                      Trace
+                    </a>
+                  )}
+                  {step.video_ref && (
+                    <a
+                      href={step.video_ref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                      title="Open step recording"
+                    >
+                      <Video className="size-3.5" />
+                      Video
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Right — Step detail */}
             <div className="space-y-4">
               {/* Action type */}
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="secondary" className="gap-1.5">
                   <ActionIcon className="size-3.5" />
                   {actionCfg.label}
@@ -446,6 +518,35 @@ export function StepTimeline({ steps, executorMode }: StepTimelineProps) {
                   <CheckCircle2 className="size-4 text-green-600 dark:text-green-400" />
                 ) : (
                   <XCircle className="size-4 text-red-600 dark:text-red-400" />
+                )}
+                {/* Validator verdict */}
+                {step.validator_verdict && step.validator_verdict !== "pass" && (
+                  <span className={cn("text-xs font-medium", getVerdictColor(step.validator_verdict))}>
+                    ✗ {step.validator_verdict.replace("fail_", "").toUpperCase()}
+                  </span>
+                )}
+                {/* Failure class badge */}
+                {step.failure_class && (
+                  <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                    {getFailureLabel(step.failure_class)}
+                  </Badge>
+                )}
+                {/* Repair badge */}
+                {step.patch_applied && (
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-[10px] px-1.5 py-0 gap-1",
+                      step.patch_applied.success
+                        ? "border-green-400 text-green-700 dark:text-green-400"
+                        : "border-amber-400 text-amber-700 dark:text-amber-400",
+                    )}
+                  >
+                    <Wrench className="size-2.5" />
+                    {step.patch_applied.success ? "Repaired" : "Attempted"}:{" "}
+                    {step.patch_applied.action.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                    {step.patch_applied.success ? " ✓" : " ✗"}
+                  </Badge>
                 )}
               </div>
 

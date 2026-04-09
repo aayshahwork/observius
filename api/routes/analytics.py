@@ -7,10 +7,11 @@ GET /api/v1/analytics/health   Pre-computed aggregates for fleet health monitori
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Literal
+from typing import Any, Literal
 
 import structlog
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,7 +42,18 @@ PERIOD_CONFIG: dict[str, tuple[timedelta, str]] = {
     "24h": (timedelta(hours=24), "hour"),
     "7d": (timedelta(days=7), "day"),
     "30d": (timedelta(days=30), "day"),
+    "90d": (timedelta(days=90), "day"),
 }
+
+
+class ReliabilityResponse(BaseModel):
+    success_rate: float
+    repair_success_rate: float
+    failure_distribution: dict[str, int]
+    repair_distribution: dict[str, dict[str, Any]]
+    circuit_breaker_trips: int
+    avg_repairs_per_task: float
+    top_failing_domains: list[dict[str, Any]]
 
 
 @router.get("/health", response_model=HealthAnalyticsResponse)
@@ -289,4 +301,167 @@ async def get_health_analytics(
         executor_breakdown=executor_breakdown,
         retry_stats=retry_stats,
         alerts=alerts,
+    )
+
+
+@router.get("/reliability", response_model=ReliabilityResponse)
+async def get_reliability_analytics(
+    period: Literal["1h", "6h", "24h", "7d", "30d", "90d"] = Query(default="7d"),
+    account: Account = Depends(get_current_account),
+    db: AsyncSession = Depends(get_db),
+) -> ReliabilityResponse:
+    """Return reliability metrics: failure distribution, repair effectiveness, circuit breaker trips."""
+    delta, _ = PERIOD_CONFIG[period]
+    now = datetime.now(timezone.utc)
+    cutoff = now - delta
+    params: dict = {"account_id": account.id, "cutoff": cutoff}
+
+    # 1. Overall success rate
+    totals = (
+        await db.execute(
+            text("""
+                SELECT
+                    COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE success = true) AS succeeded
+                FROM tasks
+                WHERE account_id = :account_id AND created_at >= :cutoff
+            """),
+            params,
+        )
+    ).mappings().one()
+    success_rate = round(totals["succeeded"] / totals["total"], 4) if totals["total"] else 0.0
+
+    # 2. Repair success rate (tasks that had at least one patch, what % succeeded)
+    repair_tasks = (
+        await db.execute(
+            text("""
+                SELECT
+                    COUNT(DISTINCT t.id) AS total_with_repairs,
+                    COUNT(DISTINCT t.id) FILTER (WHERE t.success = true) AS succeeded_with_repairs
+                FROM tasks t
+                WHERE t.account_id = :account_id
+                  AND t.created_at >= :cutoff
+                  AND EXISTS (
+                      SELECT 1 FROM task_steps ts
+                      WHERE ts.task_id = t.id AND ts.patch_applied IS NOT NULL
+                  )
+            """),
+            params,
+        )
+    ).mappings().one()
+    repair_success_rate = (
+        round(repair_tasks["succeeded_with_repairs"] / repair_tasks["total_with_repairs"], 4)
+        if repair_tasks["total_with_repairs"]
+        else 0.0
+    )
+
+    # 3. Failure distribution by failure_class
+    failure_rows = await db.execute(
+        text("""
+            SELECT ts.failure_class, COUNT(*) AS cnt
+            FROM task_steps ts
+            JOIN tasks t ON t.id = ts.task_id
+            WHERE t.account_id = :account_id
+              AND t.created_at >= :cutoff
+              AND ts.failure_class IS NOT NULL
+            GROUP BY ts.failure_class
+            ORDER BY cnt DESC
+            LIMIT 20
+        """),
+        params,
+    )
+    failure_distribution: dict[str, int] = {r.failure_class: r.cnt for r in failure_rows}
+
+    # 4. Repair distribution by action
+    repair_rows = await db.execute(
+        text("""
+            SELECT
+                ts.patch_applied->>'action' AS action,
+                COUNT(*) AS attempts,
+                COUNT(*) FILTER (WHERE (ts.patch_applied->>'success')::boolean = true) AS successes
+            FROM task_steps ts
+            JOIN tasks t ON t.id = ts.task_id
+            WHERE t.account_id = :account_id
+              AND t.created_at >= :cutoff
+              AND ts.patch_applied IS NOT NULL
+              AND ts.patch_applied->>'action' IS NOT NULL
+            GROUP BY action
+            ORDER BY attempts DESC
+            LIMIT 20
+        """),
+        params,
+    )
+    repair_distribution: dict[str, dict[str, Any]] = {
+        r.action: {"attempts": r.attempts, "successes": r.successes}
+        for r in repair_rows
+    }
+
+    # 5. Circuit breaker trips (tasks that failed with non-empty failure_counts)
+    cb_row = (
+        await db.execute(
+            text("""
+                SELECT COUNT(*) AS trips
+                FROM tasks
+                WHERE account_id = :account_id
+                  AND created_at >= :cutoff
+                  AND status = 'failed'
+                  AND failure_counts IS NOT NULL
+                  AND failure_counts != '{}'::jsonb
+            """),
+            params,
+        )
+    ).mappings().one()
+    circuit_breaker_trips = cb_row["trips"]
+
+    # 6. Average repairs per task
+    avg_row = (
+        await db.execute(
+            text("""
+                SELECT COALESCE(AVG(repair_count), 0) AS avg_repairs
+                FROM (
+                    SELECT t.id, COUNT(ts.id) AS repair_count
+                    FROM tasks t
+                    LEFT JOIN task_steps ts ON ts.task_id = t.id AND ts.patch_applied IS NOT NULL
+                    WHERE t.account_id = :account_id AND t.created_at >= :cutoff
+                    GROUP BY t.id
+                ) sub
+            """),
+            params,
+        )
+    ).mappings().one()
+    avg_repairs_per_task = round(float(avg_row["avg_repairs"]), 2)
+
+    # 7. Top failing domains
+    domain_rows = await db.execute(
+        text("""
+            SELECT
+                split_part(regexp_replace(url, '^https?://', ''), '/', 1) AS domain,
+                COUNT(*) AS failure_count,
+                MODE() WITHIN GROUP (ORDER BY ts.failure_class) AS top_failure
+            FROM tasks t
+            JOIN task_steps ts ON ts.task_id = t.id
+            WHERE t.account_id = :account_id
+              AND t.created_at >= :cutoff
+              AND t.status IN ('failed', 'timeout')
+              AND ts.failure_class IS NOT NULL
+              AND t.url IS NOT NULL AND t.url != ''
+            GROUP BY domain
+            ORDER BY failure_count DESC
+            LIMIT 10
+        """),
+        params,
+    )
+    top_failing_domains = [
+        {"domain": r.domain or "unknown", "failure_count": r.failure_count, "top_failure": r.top_failure or "unknown"}
+        for r in domain_rows
+    ]
+
+    return ReliabilityResponse(
+        success_rate=success_rate,
+        repair_success_rate=repair_success_rate,
+        failure_distribution=failure_distribution,
+        repair_distribution=repair_distribution,
+        circuit_breaker_trips=circuit_breaker_trips,
+        avg_repairs_per_task=avg_repairs_per_task,
+        top_failing_domains=top_failing_domains,
     )

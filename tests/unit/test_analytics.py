@@ -85,7 +85,8 @@ def _standard_mock_db(
     async def mock_execute(query, params=None):
         nonlocal call_count
         call_count += 1
-        # Call order: 1=main, 2=prev, 3=errors, 4=urls, 5=hourly, 6=exec, 7=retry, 8=alerts
+        # Call order: 1=main, 2=prev, 3=errors, 4=urls, 5=hourly, 6=exec,
+        #             7=retry, 8=category+diag_cost (7b in route), 9=alerts
         if call_count == 1:
             return _MockResult(mapping=main)
         if call_count == 2:
@@ -100,7 +101,9 @@ def _standard_mock_db(
             return _MockResult(rows=exec_rows or [])
         if call_count == 7:
             return _MockResult(mapping=retry)
-        # 8 = alerts
+        if call_count == 8:  # category breakdown + diagnosis cost (query 7b)
+            return _MockResult(rows=[])
+        # 9 = alerts
         if alerts_error:
             raise ProgrammingError(
                 "SELECT", {}, Exception('relation "alerts" does not exist')

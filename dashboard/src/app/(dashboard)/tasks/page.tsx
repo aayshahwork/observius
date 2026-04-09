@@ -49,6 +49,7 @@ export default function TasksPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [dateRange, setDateRange] = useState<DateRange>("all");
   const [errorCategoryFilter, setErrorCategoryFilter] = useState("all");
+  const [dominantFailureFilter, setDominantFailureFilter] = useState("all");
   const [offset, setOffset] = useState(0);
 
   const [tasks, setTasks] = useState<TaskResponse[]>([]);
@@ -68,10 +69,12 @@ export default function TasksPage() {
     if (!client) return;
     try {
       const since = getDateRangeSince(dateRange);
+      // "repaired" is a client-side computed filter — don't pass a status to API
+      const apiStatus = statusFilter === "all" || statusFilter === "repaired" ? undefined : statusFilter;
       const res = await client.listTasks({
         limit: PAGE_SIZE,
         offset,
-        status: statusFilter === "all" ? undefined : statusFilter,
+        status: apiStatus,
         since,
       });
       setTasks(res.tasks);
@@ -83,7 +86,7 @@ export default function TasksPage() {
     } finally {
       setLoading(false);
     }
-  }, [client, offset, statusFilter, dateRange]);
+  }, [client, offset, statusFilter, dateRange]);  // dominantFailureFilter is client-side only
 
   useEffect(() => {
     setLoading(true);
@@ -114,6 +117,11 @@ export default function TasksPage() {
       });
     }
 
+    // Repaired tasks filter (client-side computed field)
+    if (statusFilter === "repaired") {
+      result = result.filter((t) => t.was_repaired === true);
+    }
+
     // Error category (only when status=failed)
     if (statusFilter === "failed" && errorCategoryFilter !== "all") {
       result = result.filter((t) => {
@@ -123,6 +131,22 @@ export default function TasksPage() {
           return t.error_category?.startsWith("permanent");
         if (errorCategoryFilter === "rate_limited")
           return t.error_category === "rate_limited";
+        return true;
+      });
+    }
+
+    // Dominant failure class filter (only when status=failed)
+    if (statusFilter === "failed" && dominantFailureFilter !== "all") {
+      const UI_FAILURES = ["element_not_found", "element_obscured", "captcha_challenge"];
+      const NETWORK_FAILURES = ["network_timeout", "auth_required"];
+      const GOAL_FAILURES = ["goal_not_met", "stuck_state", "navigation_loop"];
+      const POLICY_FAILURES = ["policy_violation", "page_crash"];
+      result = result.filter((t) => {
+        const df = t.dominant_failure ?? "";
+        if (dominantFailureFilter === "ui") return UI_FAILURES.includes(df);
+        if (dominantFailureFilter === "network") return NETWORK_FAILURES.includes(df);
+        if (dominantFailureFilter === "goal") return GOAL_FAILURES.includes(df);
+        if (dominantFailureFilter === "policy") return POLICY_FAILURES.includes(df);
         return true;
       });
     }
@@ -150,12 +174,13 @@ export default function TasksPage() {
     });
 
     return result;
-  }, [tasks, debouncedSearch, statusFilter, errorCategoryFilter, sortField, sortOrder]);
+  }, [tasks, debouncedSearch, statusFilter, errorCategoryFilter, dominantFailureFilter, sortField, sortOrder]);
 
   const handleFilterChange = (value: string) => {
     setStatusFilter(value);
     setOffset(0);
     setErrorCategoryFilter("all");
+    setDominantFailureFilter("all");
   };
 
   const handleSort = (field: SortField) => {
@@ -207,33 +232,50 @@ export default function TasksPage() {
           ))}
         </div>
         {statusFilter === "failed" && (
-          <Select
-            value={errorCategoryFilter}
-            onValueChange={(v) => setErrorCategoryFilter(v ?? "all")}
-          >
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="Error type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All errors</SelectItem>
-              <SelectItem value="transient">Transient</SelectItem>
-              <SelectItem value="permanent">Permanent</SelectItem>
-              <SelectItem value="rate_limited">Rate limited</SelectItem>
-            </SelectContent>
-          </Select>
+          <>
+            <Select
+              value={errorCategoryFilter}
+              onValueChange={(v) => setErrorCategoryFilter(v ?? "all")}
+            >
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="Error type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All errors</SelectItem>
+                <SelectItem value="transient">Transient</SelectItem>
+                <SelectItem value="permanent">Permanent</SelectItem>
+                <SelectItem value="rate_limited">Rate limited</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              value={dominantFailureFilter}
+              onValueChange={(v) => setDominantFailureFilter(v ?? "all")}
+            >
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="Failure class" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All failures</SelectItem>
+                <SelectItem value="ui">UI Issues</SelectItem>
+                <SelectItem value="network">Network / Auth</SelectItem>
+                <SelectItem value="goal">Goal Not Met</SelectItem>
+                <SelectItem value="policy">Policy / Crash</SelectItem>
+              </SelectContent>
+            </Select>
+          </>
         )}
       </div>
 
       {/* Status filter */}
-      <div className="flex gap-1">
-        {(["all", "queued", "running", "completed", "failed"] as const).map((s) => (
+      <div className="flex gap-1 flex-wrap">
+        {(["all", "queued", "running", "completed", "failed", "repaired"] as const).map((s) => (
           <Button
             key={s}
             variant={statusFilter === s ? "secondary" : "ghost"}
             size="sm"
             onClick={() => handleFilterChange(s)}
           >
-            {s.charAt(0).toUpperCase() + s.slice(1)}
+            {s === "repaired" ? "Repaired" : s.charAt(0).toUpperCase() + s.slice(1)}
           </Button>
         ))}
       </div>

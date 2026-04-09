@@ -112,8 +112,8 @@ test.describe("Cost cell formatting", () => {
 // Native indicator ("N" badge)
 // ---------------------------------------------------------------------------
 
-test.describe("Native indicator badge", () => {
-  test("'N' badge appears in status cell for native executor tasks", async ({
+test.describe("Engine badge column", () => {
+  test("'CUA' badge appears in engine column for native executor tasks", async ({
     authedPage: page,
   }) => {
     await mockTaskList(page, [NATIVE_TASK]);
@@ -122,14 +122,11 @@ test.describe("Native indicator badge", () => {
     const taskRow = page.getByRole("row").filter({
       hasText: NATIVE_TASK.task_id.slice(0, 8),
     });
-    const statusCell = taskRow.locator("td").first();
-
-    // The badge contains just "N"
-    const nBadge = statusCell.locator('[data-slot="badge"]').filter({ hasText: /^N$/ });
-    await expect(nBadge).toBeVisible();
+    const cuaBadge = taskRow.locator('[data-slot="badge"]').filter({ hasText: /^CUA$/ });
+    await expect(cuaBadge).toBeVisible();
   });
 
-  test("'N' badge is absent for browser_use tasks", async ({
+  test("'BU' badge appears for browser_use tasks", async ({
     authedPage: page,
   }) => {
     await mockTaskList(page, [COMPLETED_TASK_FULL]); // executor_mode: "browser_use"
@@ -138,13 +135,11 @@ test.describe("Native indicator badge", () => {
     const taskRow = page.getByRole("row").filter({
       hasText: COMPLETED_TASK_FULL.task_id.slice(0, 8),
     });
-    const statusCell = taskRow.locator("td").first();
-
-    const nBadge = statusCell.locator('[data-slot="badge"]').filter({ hasText: /^N$/ });
-    await expect(nBadge).not.toBeVisible();
+    const buBadge = taskRow.locator('[data-slot="badge"]').filter({ hasText: /^BU$/ });
+    await expect(buBadge).toBeVisible();
   });
 
-  test("mixed list: 'N' shows only on native rows", async ({
+  test("mixed list: correct engine badges on each row", async ({
     authedPage: page,
   }) => {
     await mockTaskList(page, [COMPLETED_TASK_FULL, NATIVE_TASK]);
@@ -158,12 +153,12 @@ test.describe("Native indicator badge", () => {
     });
 
     await expect(
-      nativeRow.locator('[data-slot="badge"]').filter({ hasText: /^N$/ })
+      nativeRow.locator('[data-slot="badge"]').filter({ hasText: /^CUA$/ })
     ).toBeVisible();
 
     await expect(
-      browserUseRow.locator('[data-slot="badge"]').filter({ hasText: /^N$/ })
-    ).not.toBeVisible();
+      browserUseRow.locator('[data-slot="badge"]').filter({ hasText: /^BU$/ })
+    ).toBeVisible();
   });
 });
 

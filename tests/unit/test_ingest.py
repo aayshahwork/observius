@@ -231,7 +231,13 @@ class TestIngestTask:
         mock_list_result = MagicMock()
         mock_list_result.scalars.return_value.all.return_value = [ingested_task]
 
-        mock_db.execute = AsyncMock(side_effect=[mock_count_result, mock_list_result])
+        # list_tasks fetches repair_rows and failure_rows per page (2 extra queries)
+        mock_repair_result = MagicMock()
+        mock_repair_result.all.return_value = []
+        mock_failure_result = MagicMock()
+        mock_failure_result.all.return_value = []
+
+        mock_db.execute = AsyncMock(side_effect=[mock_count_result, mock_list_result, mock_repair_result, mock_failure_result])
 
         resp = client.get("/api/v1/tasks")
         assert resp.status_code == 200
@@ -256,6 +262,13 @@ class TestIngestTask:
         step.error_message = None
         step.created_at = datetime.now(timezone.utc)
         step.context = None
+
+        step.validator_verdict = None
+        step.failure_class = None
+        step.patch_applied = None
+        step.har_ref = None
+        step.trace_ref = None
+        step.video_ref = None
 
         # First call: task ownership check, second call: steps query
         mock_task_result = MagicMock()
@@ -886,6 +899,12 @@ class TestIngestE2EFlows:
         step_0.error_message = None
         step_0.created_at = datetime.now(timezone.utc)
         step_0.context = None
+        step_0.validator_verdict = None
+        step_0.failure_class = None
+        step_0.patch_applied = None
+        step_0.har_ref = None
+        step_0.trace_ref = None
+        step_0.video_ref = None
 
         step_1 = MagicMock()
         step_1.step_number = 1
@@ -899,6 +918,12 @@ class TestIngestE2EFlows:
         step_1.error_message = None
         step_1.created_at = datetime.now(timezone.utc)
         step_1.context = None
+        step_1.validator_verdict = None
+        step_1.failure_class = None
+        step_1.patch_applied = None
+        step_1.har_ref = None
+        step_1.trace_ref = None
+        step_1.video_ref = None
 
         mock_task_result = MagicMock()
         mock_task_result.scalar_one_or_none.return_value = task_mock
@@ -935,7 +960,12 @@ class TestIngestE2EFlows:
         mock_count.scalar.return_value = 2
         mock_list = MagicMock()
         mock_list.scalars.return_value.all.return_value = [sdk_task, cloud_task]
-        mock_db.execute = AsyncMock(side_effect=[mock_count, mock_list])
+        # list_tasks fetches repair_rows and failure_rows per page (2 extra queries)
+        mock_repair = MagicMock()
+        mock_repair.all.return_value = []
+        mock_failure = MagicMock()
+        mock_failure.all.return_value = []
+        mock_db.execute = AsyncMock(side_effect=[mock_count, mock_list, mock_repair, mock_failure])
 
         resp = client.get("/api/v1/tasks")
         assert resp.status_code == 200

@@ -79,9 +79,12 @@ class TaskCreateRequest(BaseModel):
     max_cost_cents: int | None = Field(default=None, gt=0)
     executor_mode: str = Field(
         default="browser_use",
-        pattern=r"^(browser_use|native)$",
-        description="Executor mode: 'browser_use' (DOM-based) or 'native' (screenshot pixel-based)",
+        pattern=r"^(browser_use|native|skyvern)$",
+        description="Executor mode: 'browser_use' (DOM-based), 'native' (screenshot pixel-based), or 'skyvern' (Skyvern cloud API)",
     )
+    skyvern_engine: str | None = Field(default=None, description="Skyvern engine version (e.g. 'skyvern-2.0')")
+    proxy_location: str | None = Field(default=None, description="Proxy location for Skyvern (e.g. 'RESIDENTIAL')")
+    data_extraction_schema: dict[str, Any] | None = Field(default=None, description="JSON schema for Skyvern data extraction")
 
 
 # ---------------------------------------------------------------------------
@@ -113,6 +116,11 @@ class TaskResponse(BaseModel):
     analysis: dict[str, Any] | None = None
     compiled_workflow: dict[str, Any] | None = None
     playwright_script: str | None = None
+    # Reliability fields (computed / from migration 015)
+    failure_counts: dict[str, int] | None = None
+    dominant_failure: str | None = None
+    repair_count: int = 0
+    was_repaired: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -139,6 +147,13 @@ class StepResponse(BaseModel):
     error: str | None = None
     created_at: datetime | None = None
     context: dict[str, Any] | None = None
+    # Reliability fields (added in migration 015)
+    validator_verdict: str | None = None
+    failure_class: str | None = None
+    patch_applied: dict[str, Any] | None = None
+    har_ref: str | None = None
+    trace_ref: str | None = None
+    video_ref: str | None = None
 
     model_config = {"from_attributes": True}
 

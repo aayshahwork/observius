@@ -405,36 +405,36 @@ class TestNativeLoop:
 
 
 class TestDispatch:
+    """After PAV rewire, execute() delegates to run_pav_loop.
+    Dispatch to the correct backend is done by backend_for_task in the registry."""
+
     async def test_dispatch_browser_use_default(self, mock_browser_manager, mock_llm, mock_page):
-        """executor_mode absent defaults to browser_use path."""
+        """executor_mode='browser_use' creates a BrowserUseBackend via registry."""
+        from workers.models import TaskResult
+
+        expected = TaskResult(task_id="d1", status="completed", success=True, steps=1)
         executor = _make_executor(mock_browser_manager, mock_llm, executor_mode="browser_use")
-        # The browser_use path calls _execute_with_agent
-        with patch.object(executor, "_execute_with_agent", new_callable=AsyncMock) as mock_agent, \
-             patch.object(executor, "_navigate_with_retry", new_callable=AsyncMock):
-            mock_result = MagicMock()
-            mock_result.final_result = MagicMock(return_value={"data": "test"})
-            mock_result.is_done = MagicMock(return_value=True)
-            mock_result.history = []
-            mock_result.total_cost = MagicMock(return_value=0.01)
-            mock_agent.return_value = mock_result
+        with patch("workers.pav.loop.run_pav_loop", new_callable=AsyncMock, return_value=expected) as mock_pav, \
+             patch("workers.backends.registry.backend_for_task") as mock_factory:
+            mock_factory.return_value = MagicMock()
             await executor.execute()
 
-        mock_agent.assert_called_once()
+        mock_pav.assert_awaited_once()
+        mock_factory.assert_called_once()
 
     async def test_dispatch_native_mode(self, mock_browser_manager, mock_llm, mock_page):
-        """executor_mode="native" routes to _execute_native."""
+        """executor_mode='native' creates a NativeAnthropicBackend via registry."""
+        from workers.models import TaskResult
+
+        expected = TaskResult(task_id="d2", status="completed", success=True,
+                              result={"ok": True}, steps=1)
         executor = _make_executor(mock_browser_manager, mock_llm, executor_mode="native")
-        with patch.object(executor, "_execute_native", new_callable=AsyncMock) as mock_native, \
-             patch.object(executor, "_navigate_with_retry", new_callable=AsyncMock):
-            mock_native.return_value = MagicMock(
-                result_data={"ok": True},
-                cost_cents=1.5,
-                total_tokens_in=500,
-                total_tokens_out=200,
-            )
+        with patch("workers.pav.loop.run_pav_loop", new_callable=AsyncMock, return_value=expected) as mock_pav, \
+             patch("workers.backends.registry.backend_for_task") as mock_factory:
+            mock_factory.return_value = MagicMock()
             result = await executor.execute()
 
-        mock_native.assert_called_once()
+        mock_pav.assert_awaited_once()
         assert result.success is True
         assert result.result == {"ok": True}
 

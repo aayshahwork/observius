@@ -16,6 +16,7 @@ import type {
   AlertListResponse,
   AnalyticsPeriod,
   HealthAnalyticsResponse,
+  ReliabilityAnalytics,
   ScriptListResponse,
 } from "./types";
 
@@ -273,6 +274,15 @@ export class ApiClient {
     qs.set("period", period);
     return apiCall<HealthAnalyticsResponse>(
       `/api/v1/analytics/health?${qs.toString()}`,
+      { headers: this.headers },
+    );
+  }
+
+  async getReliabilityAnalytics(period: string = "7d"): Promise<ReliabilityAnalytics> {
+    const qs = new URLSearchParams();
+    qs.set("period", period);
+    return apiCall<ReliabilityAnalytics>(
+      `/api/v1/analytics/reliability?${qs.toString()}`,
       { headers: this.headers },
     );
   }

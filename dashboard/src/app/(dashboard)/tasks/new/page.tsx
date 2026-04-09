@@ -35,6 +35,8 @@ export default function NewTaskPage() {
   const [webhookUrl, setWebhookUrl] = useState("");
   const [executorMode, setExecutorMode] = useState<ExecutorMode>("browser_use");
   const [maxCostCents, setMaxCostCents] = useState("");
+  const [skyvernEngine, setSkyvernEngine] = useState("");
+  const [proxyLocation, setProxyLocation] = useState("");
   const [sessionId, setSessionId] = useState("");
   const [sessions, setSessions] = useState<SessionResponse[]>([]);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -66,6 +68,8 @@ export default function NewTaskPage() {
         executor_mode: executorMode,
         max_cost_cents: maxCostCents ? parseInt(maxCostCents, 10) : undefined,
         session_id: sessionId || undefined,
+        skyvern_engine: executorMode === "skyvern" && skyvernEngine ? skyvernEngine : undefined,
+        proxy_location: executorMode === "skyvern" && proxyLocation ? proxyLocation : undefined,
       });
       toast.success("Task created");
       router.push(`/tasks/${res.task_id}`);
@@ -188,36 +192,62 @@ export default function NewTaskPage() {
               </button>
               {advancedOpen && (
                 <div className="space-y-4 border-t px-4 py-4">
-                  <fieldset className="space-y-2">
-                    <Label>Executor Mode</Label>
-                    <div className="flex gap-4">
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          type="radio"
-                          name="executor_mode"
-                          value="browser_use"
-                          checked={executorMode === "browser_use"}
-                          onChange={() => setExecutorMode("browser_use")}
-                          className="accent-primary"
-                        />
-                        Browser Use (default)
-                      </label>
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          type="radio"
-                          name="executor_mode"
-                          value="native"
-                          checked={executorMode === "native"}
-                          onChange={() => setExecutorMode("native")}
-                          className="accent-primary"
-                        />
-                        Native Claude CUA
-                      </label>
+                  <fieldset className="space-y-3">
+                    <Label>Execution Engine</Label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {([
+                        { value: "browser_use" as const, label: "Browser Use", desc: "DOM-based automation via browser-use. Best for structured pages." },
+                        { value: "native" as const, label: "Anthropic CUA", desc: "Claude\u2019s computer vision (screenshot pixel-based). Handles complex visual layouts." },
+                        { value: "skyvern" as const, label: "Skyvern", desc: "Cloud-hosted browser via Skyvern API. Goal delegation with video recording." },
+                      ]).map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setExecutorMode(opt.value)}
+                          className={`rounded-lg border p-3 text-left text-sm transition-colors ${
+                            executorMode === opt.value
+                              ? "border-primary bg-primary/5 ring-1 ring-primary"
+                              : "border-border hover:border-muted-foreground/40"
+                          }`}
+                          title={opt.desc}
+                        >
+                          <div className="font-medium">{opt.label}</div>
+                          <div className="mt-1 text-xs text-muted-foreground leading-snug">{opt.desc}</div>
+                        </button>
+                      ))}
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Native mode uses Claude&apos;s computer vision directly. May handle complex visual layouts better.
-                    </p>
                   </fieldset>
+
+                  {executorMode === "skyvern" && (
+                    <div className="grid grid-cols-2 gap-4 rounded-lg border border-dashed p-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="skyvern-engine">Skyvern Engine</Label>
+                        <Select value={skyvernEngine} onValueChange={(v) => setSkyvernEngine(v ?? "")}>
+                          <SelectTrigger id="skyvern-engine" className="w-full">
+                            <SelectValue placeholder="Default (skyvern-2.0)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">Default (skyvern-2.0)</SelectItem>
+                            <SelectItem value="skyvern-2.0">skyvern-2.0</SelectItem>
+                            <SelectItem value="skyvern-1.0">skyvern-1.0</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="proxy-location">Proxy Location</Label>
+                        <Select value={proxyLocation} onValueChange={(v) => setProxyLocation(v ?? "")}>
+                          <SelectTrigger id="proxy-location" className="w-full">
+                            <SelectValue placeholder="None" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">None</SelectItem>
+                            <SelectItem value="RESIDENTIAL">Residential</SelectItem>
+                            <SelectItem value="DATACENTER">Datacenter</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  )}
 
                   {sessions.length > 0 && (
                     <div className="space-y-2">
