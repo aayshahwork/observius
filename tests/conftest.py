@@ -92,6 +92,10 @@ os.environ.setdefault("API_SECRET_KEY", "test-secret")
 os.environ.setdefault("ENCRYPTION_MASTER_KEY", "test-encryption-key")
 os.environ.setdefault("SESSION_DIR", "./sessions")
 os.environ.setdefault("REPLAY_DIR", "./replays")
+os.environ.setdefault("AWS_ACCESS_KEY_ID", "test-aws-key")
+os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "test-aws-secret")
+os.environ.setdefault("AWS_BUCKET_NAME", "test-bucket")
+os.environ.setdefault("AWS_REGION", "us-east-1")
 
 # boto3 ────────────────────────────────────────────────────────────────────
 _boto3 = _stub("boto3", client=MagicMock)
@@ -102,6 +106,9 @@ _botocore_exceptions = _stub(
     BotoCoreError=Exception,
     ClientError=Exception,
 )
+
+# aioboto3 ──────────────────────────────────────────────────────────────────
+_aioboto3 = _stub("aioboto3", Session=MagicMock)
 
 # psycopg2 ─────────────────────────────────────────────────────────────────
 _psycopg2 = _stub("psycopg2")

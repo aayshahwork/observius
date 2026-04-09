@@ -21,6 +21,7 @@ import { AnalysisPanel } from "@/components/analysis-panel";
 import { StepTimeline } from "@/components/step-timeline";
 import { WorkflowPanel } from "@/components/workflow-panel";
 import { RetryChain } from "@/components/retry-chain";
+import { RepairActivity } from "@/components/repair-activity";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useApiClient } from "@/hooks/use-api-client";
@@ -289,6 +290,11 @@ export default function TaskDetailPage() {
           </dl>
         </CardContent>
       </Card>
+
+      {/* Repair Activity */}
+      {steps.length > 0 && (
+        <RepairActivity steps={steps} failureCounts={task.failure_counts} />
+      )}
 
       {/* Error Display */}
       {task.error && (

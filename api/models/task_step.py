@@ -27,6 +27,12 @@ class TaskStep(Base):
     success: Mapped[bool | None] = mapped_column(Boolean, server_default=text("true"))
     error_message: Mapped[str | None] = mapped_column(String)
     context: Mapped[dict | None] = mapped_column(JSONB)
+    failure_class: Mapped[str | None] = mapped_column(String)
+    patch_applied: Mapped[dict | None] = mapped_column(JSONB)
+    validator_verdict: Mapped[str | None] = mapped_column(String)
+    har_ref: Mapped[str | None] = mapped_column(String)
+    trace_ref: Mapped[str | None] = mapped_column(String)
+    video_ref: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[datetime | None] = mapped_column(server_default=text("now()"))
 
     task: Mapped[Task] = relationship(back_populates="steps")

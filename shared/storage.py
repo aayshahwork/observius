@@ -15,9 +15,13 @@ Required environment variables (or .env):
 
 from __future__ import annotations
 
+import gzip
 import logging
+import os
 from pathlib import Path
 from typing import Optional
+
+import httpx
 
 import aioboto3
 from botocore.exceptions import BotoCoreError, ClientError
@@ -170,6 +174,188 @@ async def delete_screenshots(task_id: str) -> int:
     deleted = await _delete_objects_batch(keys)
     logger.info("Deleted %d screenshot(s) for task %s", deleted, task_id)
     return deleted
+
+
+# ---------------------------------------------------------------------------
+# Supabase Storage artifact uploads
+#
+# These use the Supabase Storage REST API directly (no SDK dependency).
+# Required env vars: SUPABASE_URL, SUPABASE_KEY.
+# The bucket ``artifacts`` must exist (created automatically on first upload
+# via _ensure_artifacts_bucket).
+# ---------------------------------------------------------------------------
+
+ARTIFACTS_BUCKET = "artifacts"
+_artifacts_bucket_ensured = False
+
+
+async def _supabase_upload(
+    object_path: str,
+    body: bytes,
+    content_type: str,
+) -> str:
+    """Upload *body* to Supabase Storage and return its public URL.
+
+    Args:
+        object_path: Path within the ``artifacts`` bucket.
+        body:        Raw bytes to upload.
+        content_type: MIME type.
+
+    Returns:
+        Public URL for the uploaded object.
+
+    Raises:
+        StorageError: On upload failure or missing config.
+    """
+    supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    supabase_key = os.environ.get("SUPABASE_KEY", "")
+
+    if not supabase_url or not supabase_key:
+        raise StorageError(
+            "SUPABASE_URL and SUPABASE_KEY must be set for artifact uploads"
+        )
+
+    await _ensure_artifacts_bucket(supabase_url, supabase_key)
+
+    upload_url = f"{supabase_url}/storage/v1/object/{ARTIFACTS_BUCKET}/{object_path}"
+    headers = {
+        "apikey": supabase_key,
+        "Authorization": f"Bearer {supabase_key}",
+        "Content-Type": content_type,
+        "x-upsert": "true",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(upload_url, content=body, headers=headers)
+            resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise StorageError(
+            f"Supabase Storage upload failed for '{object_path}': {exc}"
+        ) from exc
+
+    public_url = (
+        f"{supabase_url}/storage/v1/object/public/{ARTIFACTS_BUCKET}/{object_path}"
+    )
+    return public_url
+
+
+async def _ensure_artifacts_bucket(supabase_url: str, supabase_key: str) -> None:
+    """Create the ``artifacts`` bucket if it doesn't exist yet.
+
+    Idempotent — uses a module-level flag to avoid repeated API calls and
+    treats 409 Conflict (bucket already exists) as success.
+    """
+    global _artifacts_bucket_ensured
+    if _artifacts_bucket_ensured:
+        return
+
+    url = f"{supabase_url}/storage/v1/bucket"
+    headers = {
+        "apikey": supabase_key,
+        "Authorization": f"Bearer {supabase_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {"id": ARTIFACTS_BUCKET, "name": ARTIFACTS_BUCKET, "public": True}
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+            # 200 = created, 409 = already exists — both OK
+            if resp.status_code not in (200, 409):
+                resp.raise_for_status()
+        # Only mark as ensured on a definitive success (200 or 409).
+        # Transient failures fall through to the except and leave the flag
+        # False so the next call retries.
+        _artifacts_bucket_ensured = True
+    except httpx.HTTPError as exc:
+        logger.warning("Could not ensure artifacts bucket exists: %s", exc)
+
+
+async def upload_har(
+    run_id: str,
+    step_id: str,
+    har_data: bytes,
+    compress: bool = True,
+) -> str:
+    """Upload a HAR file to Supabase Storage, optionally gzip-compressed.
+
+    Args:
+        run_id:   Run/task identifier.
+        step_id:  Step identifier.
+        har_data: Raw HAR JSON bytes.
+        compress: If ``True`` (default), gzip-compress before upload.
+
+    Returns:
+        Public URL for the uploaded artifact.
+
+    Raises:
+        ValueError:    If *har_data* is empty.
+        StorageError:  On upload failures.
+    """
+    if not har_data:
+        raise ValueError("har_data must not be empty")
+
+    if compress:
+        body = gzip.compress(har_data)
+        object_path = f"{run_id}/{step_id}/network.har.gz"
+        content_type = "application/gzip"
+    else:
+        body = har_data
+        object_path = f"{run_id}/{step_id}/network.har"
+        content_type = "application/json"
+
+    url = await _supabase_upload(object_path, body, content_type)
+    logger.debug("HAR uploaded: run=%s step=%s path=%s", run_id, step_id, object_path)
+    return url
+
+
+async def upload_trace(run_id: str, step_id: str, trace_zip: bytes) -> str:
+    """Upload a Playwright trace ZIP to Supabase Storage.
+
+    Args:
+        run_id:    Run/task identifier.
+        step_id:   Step identifier.
+        trace_zip: Raw ZIP bytes of the Playwright trace.
+
+    Returns:
+        Public URL for the uploaded artifact.
+
+    Raises:
+        ValueError:    If *trace_zip* is empty.
+        StorageError:  On upload failures.
+    """
+    if not trace_zip:
+        raise ValueError("trace_zip must not be empty")
+
+    object_path = f"{run_id}/{step_id}/trace.zip"
+    url = await _supabase_upload(object_path, trace_zip, "application/zip")
+    logger.debug("Trace uploaded: run=%s step=%s path=%s", run_id, step_id, object_path)
+    return url
+
+
+async def upload_video(run_id: str, step_id: str, video_data: bytes) -> str:
+    """Upload a video recording to Supabase Storage.
+
+    Args:
+        run_id:     Run/task identifier.
+        step_id:    Step identifier.
+        video_data: Raw WebM video bytes.
+
+    Returns:
+        Public URL for the uploaded artifact.
+
+    Raises:
+        ValueError:    If *video_data* is empty.
+        StorageError:  On upload failures.
+    """
+    if not video_data:
+        raise ValueError("video_data must not be empty")
+
+    object_path = f"{run_id}/{step_id}/recording.webm"
+    url = await _supabase_upload(object_path, video_data, "video/webm")
+    logger.debug("Video uploaded: run=%s step=%s path=%s", run_id, step_id, object_path)
+    return url
 
 
 def get_replay_url(task_id: str, extension: str = ".json") -> str:

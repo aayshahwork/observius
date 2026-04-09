@@ -113,6 +113,11 @@ class TaskResponse(BaseModel):
     analysis: dict[str, Any] | None = None
     compiled_workflow: dict[str, Any] | None = None
     playwright_script: str | None = None
+    # Reliability fields (computed / from migration 015)
+    failure_counts: dict[str, int] | None = None
+    dominant_failure: str | None = None
+    repair_count: int = 0
+    was_repaired: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -139,6 +144,13 @@ class StepResponse(BaseModel):
     error: str | None = None
     created_at: datetime | None = None
     context: dict[str, Any] | None = None
+    # Reliability fields (added in migration 015)
+    validator_verdict: str | None = None
+    failure_class: str | None = None
+    patch_applied: dict[str, Any] | None = None
+    har_ref: str | None = None
+    trace_ref: str | None = None
+    video_ref: str | None = None
 
     model_config = {"from_attributes": True}
 

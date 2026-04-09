@@ -118,6 +118,11 @@ export interface TaskResponse {
   analysis?: RunAnalysis | null;
   compiled_workflow?: CompiledWorkflow | null;
   playwright_script?: string | null;
+  // Reliability fields (migration 015 + computed)
+  failure_counts?: Record<string, number> | null;
+  dominant_failure?: string | null;
+  repair_count?: number;
+  was_repaired?: boolean;
 }
 
 export interface TaskListResponse {
@@ -138,6 +143,13 @@ export interface StepResponse {
   error: string | null;
   created_at: string | null;
   context?: Record<string, unknown> | null;
+  // Reliability fields (migration 015)
+  validator_verdict?: "pass" | "fail_ui" | "fail_goal" | "fail_network" | "fail_policy" | "fail_stuck" | null;
+  failure_class?: string | null;
+  patch_applied?: { action: string; success: boolean } | null;
+  har_ref?: string | null;
+  trace_ref?: string | null;
+  video_ref?: string | null;
 }
 
 export interface TaskCreateRequest {
@@ -250,6 +262,18 @@ export interface AlertListResponse {
   alerts: AlertResponse[];
   total: number;
   has_more: boolean;
+}
+
+// Reliability Analytics
+
+export interface ReliabilityAnalytics {
+  success_rate: number;
+  repair_success_rate: number;
+  failure_distribution: Record<string, number>;
+  repair_distribution: Record<string, { attempts: number; successes: number }>;
+  circuit_breaker_trips: number;
+  avg_repairs_per_task: number;
+  top_failing_domains: Array<{ domain: string; failure_count: number; top_failure: string }>;
 }
 
 // Health Analytics

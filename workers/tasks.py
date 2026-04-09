@@ -292,6 +292,7 @@ def _persist_result(task_id: str, result: Any, config_dict: dict) -> None:
 
         # Insert step data
         for step in result.step_data:
+            _ctx = step.context or {}
             task_step = TaskStep(
                 task_id=uuid.UUID(task_id),
                 step_number=step.step_number,
@@ -304,6 +305,12 @@ def _persist_result(task_id: str, result: Any, config_dict: dict) -> None:
                 success=step.success,
                 error_message=step.error,
                 context=step.context,
+                failure_class=_ctx.get("failure_class"),
+                validator_verdict=_ctx.get("validator_verdict"),
+                patch_applied=_ctx.get("patch_applied"),
+                har_ref=_ctx.get("har_ref"),
+                trace_ref=_ctx.get("trace_ref"),
+                video_ref=_ctx.get("video_ref"),
             )
             session.add(task_step)
 

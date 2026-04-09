@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/status-badge";
+import { ReliabilitySection } from "@/components/reliability-section";
 import { useApiClient } from "@/hooks/use-api-client";
 
 import {
@@ -500,6 +501,9 @@ export default function OverviewPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Reliability ───────────────────────────────────────────── */}
+      <ReliabilitySection />
     </div>
   );
 }

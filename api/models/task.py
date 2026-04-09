@@ -61,6 +61,7 @@ class Task(Base):
     analysis_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     compiled_workflow_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     playwright_script: Mapped[str | None] = mapped_column(String, nullable=True)
+    failure_counts: Mapped[dict | None] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

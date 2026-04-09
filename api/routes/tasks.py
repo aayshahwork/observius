@@ -49,7 +49,11 @@ _celery = Celery(broker=settings.REDIS_URL)
 _celery.conf.update(task_serializer="json", accept_content=["json"])
 
 
-def _task_to_response(task: Task) -> TaskResponse:
+def _task_to_response(
+    task: Task,
+    repair_count: int = 0,
+    dominant_failure: str | None = None,
+) -> TaskResponse:
     """Convert a Task ORM object to a TaskResponse."""
     # browser-use may store result as a JSON string; try to parse it first
     result = task.result
@@ -85,6 +89,10 @@ def _task_to_response(task: Task) -> TaskResponse:
         analysis=task.analysis_json,
         compiled_workflow=task.compiled_workflow_json,
         playwright_script=task.playwright_script,
+        failure_counts=dict(task.failure_counts) if task.failure_counts else {},
+        dominant_failure=dominant_failure,
+        repair_count=repair_count,
+        was_repaired=bool((task.success or False) and repair_count > 0),
     )
 
 
@@ -505,8 +513,42 @@ async def list_tasks(
     result = await db.execute(stmt)
     tasks = result.scalars().all()
 
+    # Batch-compute repair_count and dominant_failure for the page (2 queries, no N+1)
+    repair_map: dict[str, int] = {}
+    dominant_map: dict[str, str] = {}
+    task_ids = [t.id for t in tasks]
+    if task_ids:
+        repair_rows = await db.execute(
+            select(TaskStep.task_id, func.count().label("cnt"))
+            .where(TaskStep.task_id.in_(task_ids), TaskStep.patch_applied.isnot(None))
+            .group_by(TaskStep.task_id)
+        )
+        for r in repair_rows.all():
+            repair_map[str(r.task_id)] = r.cnt
+
+        failure_rows = await db.execute(
+            select(TaskStep.task_id, TaskStep.failure_class, func.count().label("cnt"))
+            .where(TaskStep.task_id.in_(task_ids), TaskStep.failure_class.isnot(None))
+            .group_by(TaskStep.task_id, TaskStep.failure_class)
+        )
+        cls_counts: dict[str, dict[str, int]] = {}
+        for r in failure_rows.all():
+            tid = str(r.task_id)
+            if tid not in cls_counts:
+                cls_counts[tid] = {}
+            cls_counts[tid][r.failure_class] = cls_counts[tid].get(r.failure_class, 0) + r.cnt
+        for tid, counts in cls_counts.items():
+            dominant_map[tid] = max(counts, key=counts.__getitem__)
+
     return TaskListResponse(
-        tasks=[_task_to_response(t) for t in tasks],
+        tasks=[
+            _task_to_response(
+                t,
+                repair_count=repair_map.get(str(t.id), 0),
+                dominant_failure=dominant_map.get(str(t.id)),
+            )
+            for t in tasks
+        ],
         total=total,
         has_more=(offset + limit) < total,
     )
@@ -709,6 +751,12 @@ async def get_task_steps(
             error=s.error_message,
             created_at=s.created_at,
             context=s.context,
+            validator_verdict=s.validator_verdict,
+            failure_class=s.failure_class,
+            patch_applied=s.patch_applied,
+            har_ref=s.har_ref,
+            trace_ref=s.trace_ref,
+            video_ref=s.video_ref,
         )
         for s in steps
     ]
