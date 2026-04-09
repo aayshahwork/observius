@@ -341,9 +341,7 @@ def _build_backend_config(config: TaskConfig) -> dict:
         "url": config.url,
         "task": config.task,
         "executor_mode": config.executor_mode,
-        # DOM mode by default — faster, cheaper, avoids vision payload
-        # issues.  Override with use_vision=True for visual tasks.
-        "use_vision": getattr(config, "use_vision", False),
+        "use_vision": getattr(config, "use_vision", True),
     }
 
 

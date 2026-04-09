@@ -175,7 +175,7 @@ class BrowserUseBackend:
             browser=self._browser_session,
             register_new_step_callback=self._on_agent_step,
             calculate_cost=True,
-            use_vision=self._config.get("use_vision", False),
+            use_vision=self._config.get("use_vision", True),
         )
 
         # -- Run agent (exact match to executor.py lines 460-468) --
