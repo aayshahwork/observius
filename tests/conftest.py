@@ -33,6 +33,7 @@ def _stub(name: str, **attrs: object) -> types.ModuleType:
 # anthropic ──────────────────────────────────────────────────────────────────
 _anthropic = _stub("anthropic")
 _anthropic.Anthropic = MagicMock  # type: ignore[attr-defined]
+_anthropic.AsyncAnthropic = MagicMock  # type: ignore[attr-defined]
 
 # browser_use ────────────────────────────────────────────────────────────────
 _browser_use = _stub("browser_use")

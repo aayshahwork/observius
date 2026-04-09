@@ -218,25 +218,22 @@ class TestInjectCredentials:
 # ---------------------------------------------------------------------------
 
 class TestExecute:
+    """Tests for execute() which now delegates to run_pav_loop."""
+
     async def test_execute_done_immediately(self, task_config, mock_browser_manager):
         from unittest.mock import patch
 
-        mock_run_result = MagicMock()
-        mock_run_result.final_result.return_value = {"title": "Example Domain"}
+        expected = TaskResult(
+            task_id="pav-123",
+            status="completed",
+            success=True,
+            result={"title": "Example Domain"},
+            steps=3,
+            duration_ms=500,
+            cost_cents=0.12,
+        )
 
-        def make_agent(*args, **kwargs):
-            agent = MagicMock()
-            callback = kwargs.get("register_new_step_callback")
-
-            async def run(*a, **kw):
-                if callback:
-                    callback("done")  # simulate one agent step
-                return mock_run_result
-
-            agent.run = run
-            return agent
-
-        with patch("browser_use.Agent", side_effect=make_agent):
+        with patch("workers.pav.loop.run_pav_loop", new_callable=AsyncMock, return_value=expected) as mock_pav:
             executor = TaskExecutor(
                 config=task_config,
                 browser_manager=mock_browser_manager,
@@ -247,63 +244,54 @@ class TestExecute:
         assert isinstance(result, TaskResult)
         assert result.success is True
         assert result.status == "completed"
-        assert result.steps >= 2  # navigation + agent callback step
-        assert result.duration_ms >= 0
         assert result.result == {"title": "Example Domain"}
-        mock_browser_manager.release_browser.assert_called_once()
+        assert result.steps == 3
+        mock_pav.assert_awaited_once()
 
-    async def test_execute_captures_steps(self, task_config, mock_browser_manager):
+    async def test_execute_passes_budget(self, task_config, mock_browser_manager):
         from unittest.mock import patch
 
-        mock_run_result = MagicMock()
-        mock_run_result.final_result.return_value = {"title": "Dashboard"}
+        expected = TaskResult(task_id="t", status="completed", success=True, steps=1)
 
-        def make_agent(*args, **kwargs):
-            agent = MagicMock()
-            callback = kwargs.get("register_new_step_callback")
-
-            async def run(*a, **kw):
-                if callback:
-                    callback("click step")
-                    callback("done step")
-                return mock_run_result
-
-            agent.run = run
-            return agent
-
-        with patch("browser_use.Agent", side_effect=make_agent):
+        with patch("workers.pav.loop.run_pav_loop", new_callable=AsyncMock, return_value=expected) as mock_pav:
             executor = TaskExecutor(
                 config=task_config,
                 browser_manager=mock_browser_manager,
                 llm_client=MagicMock(),
             )
-            result = await executor.execute()
+            await executor.execute()
 
-        assert result.success is True
-        assert result.steps == 3  # navigate + 2 agent callbacks
-        assert len(result.step_data) == 3
-        assert result.step_data[0].action_type == ActionType.NAVIGATE
-        # Agent steps start as UNKNOWN via _on_agent_step callback;
-        # enrichment may upgrade them if mock provides history data.
-        # With a bare MagicMock result, enrichment extracts nothing.
-        assert result.step_data[1].action_type in (ActionType.UNKNOWN, ActionType.CLICK)
-        assert result.step_data[2].action_type in (ActionType.UNKNOWN, ActionType.EXTRACT)
+        call_kwargs = mock_pav.call_args.kwargs
+        assert call_kwargs["budget"].max_steps == task_config.max_steps
+        assert call_kwargs["budget"].max_seconds == float(task_config.timeout_seconds)
+        assert call_kwargs["task_config"] is task_config
+
+    async def test_execute_passes_repair_fn(self, task_config, mock_browser_manager):
+        from unittest.mock import patch
+
+        expected = TaskResult(task_id="t", status="completed", success=True, steps=1)
+
+        with patch("workers.pav.loop.run_pav_loop", new_callable=AsyncMock, return_value=expected) as mock_pav:
+            executor = TaskExecutor(
+                config=task_config,
+                browser_manager=mock_browser_manager,
+                llm_client=MagicMock(),
+            )
+            await executor.execute()
+
+        call_kwargs = mock_pav.call_args.kwargs
+        assert call_kwargs["repair_fn"] is not None
+        assert callable(call_kwargs["repair_fn"])
 
     async def test_execute_records_token_usage(self, task_config, mock_browser_manager):
-        # Token tracking is delegated to browser_use Agent internally.
-        # The executor does not expose per-step token counts in the Agent path.
         from unittest.mock import patch
 
-        def make_agent(*args, **kwargs):
-            agent = MagicMock()
+        expected = TaskResult(
+            task_id="t", status="completed", success=True,
+            cost_cents=0.5, total_tokens_in=200, total_tokens_out=100,
+        )
 
-            async def run(*a, **kw):
-                return MagicMock()
-
-            agent.run = run
-            return agent
-
-        with patch("browser_use.Agent", side_effect=make_agent):
+        with patch("workers.pav.loop.run_pav_loop", new_callable=AsyncMock, return_value=expected):
             executor = TaskExecutor(
                 config=task_config,
                 browser_manager=mock_browser_manager,
@@ -312,20 +300,23 @@ class TestExecute:
             result = await executor.execute()
 
         assert result.success is True
-        # With a bare MagicMock result, enrichment may or may not extract cost.
-        # cost_cents is now computed from browser_use data; 0.0 is still valid
-        # when the mock doesn't provide real history/usage data.
-        assert result.cost_cents >= 0.0
+        assert result.cost_cents == 0.5
+        assert result.total_tokens_in == 200
+        assert result.total_tokens_out == 100
 
-    async def test_browser_released_on_error(self, task_config, mock_browser_manager, mock_llm_done):
-        mock_browser_manager._mock_page.goto = AsyncMock(side_effect=Exception("Navigation timeout"))
+    async def test_execute_handles_pav_failure(self, task_config, mock_browser_manager):
+        from unittest.mock import patch
 
-        executor = TaskExecutor(config=task_config, browser_manager=mock_browser_manager, llm_client=mock_llm_done)
-        result = await executor.execute()
+        with patch("workers.pav.loop.run_pav_loop", new_callable=AsyncMock, side_effect=RuntimeError("PAV exploded")):
+            executor = TaskExecutor(
+                config=task_config,
+                browser_manager=mock_browser_manager,
+                llm_client=MagicMock(),
+            )
+            result = await executor.execute()
 
         assert result.success is False
-        assert "Navigation timeout" in result.error
-        mock_browser_manager.release_browser.assert_called_once()
+        assert "PAV exploded" in result.error
 
 
 # ---------------------------------------------------------------------------
@@ -333,25 +324,15 @@ class TestExecute:
 # ---------------------------------------------------------------------------
 
 class TestCostLimit:
-    async def test_cost_limit_terminates_early(self, mock_browser_manager):
-        # Cost enforcement is delegated to browser_use Agent via max_steps.
-        # The executor forwards max_steps to agent.run() as the step budget.
-        config = TaskConfig(url="https://example.com", task="Do many things", max_steps=2, max_cost_cents=1)
+    """Budget is now passed to run_pav_loop via the Budget envelope."""
 
-        captured_run_kwargs: dict = {}
-
-        def make_agent(*args, **kwargs):
-            agent = MagicMock()
-
-            async def run(*a, **kw):
-                captured_run_kwargs.update(kw)
-                return MagicMock()
-
-            agent.run = run
-            return agent
-
+    async def test_cost_limit_passed_to_budget(self, mock_browser_manager):
         from unittest.mock import patch
-        with patch("browser_use.Agent", side_effect=make_agent):
+
+        config = TaskConfig(url="https://example.com", task="Do many things", max_steps=2, max_cost_cents=1)
+        expected = TaskResult(task_id="t", status="completed", success=True, steps=1)
+
+        with patch("workers.pav.loop.run_pav_loop", new_callable=AsyncMock, return_value=expected) as mock_pav:
             executor = TaskExecutor(
                 config=config,
                 browser_manager=mock_browser_manager,
@@ -359,20 +340,23 @@ class TestCostLimit:
             )
             await executor.execute()
 
-        # max_steps is forwarded to agent.run() as the step budget
-        assert captured_run_kwargs.get("max_steps") == 2
+        budget = mock_pav.call_args.kwargs["budget"]
+        assert budget.max_steps == 2
+        assert budget.max_cost_cents == 1.0
 
     async def test_no_limit_runs_to_completion(self, mock_browser_manager):
-        config = TaskConfig(url="https://example.com", task="Do things", max_steps=5)
-        responses = [
-            _make_llm_response("click", {"selector": "#a"}, tokens_in=100, tokens_out=50, tool_id="t1"),
-            _make_llm_response("done", {"result": {"x": 1}}, tool_id="t2"),
-        ]
-        mock_llm = MagicMock()
-        mock_llm.messages.create = MagicMock(side_effect=responses)
+        from unittest.mock import patch
 
-        executor = TaskExecutor(config=config, browser_manager=mock_browser_manager, llm_client=mock_llm)
-        result = await executor.execute()
+        config = TaskConfig(url="https://example.com", task="Do things", max_steps=5)
+        expected = TaskResult(task_id="t", status="completed", success=True, steps=2)
+
+        with patch("workers.pav.loop.run_pav_loop", new_callable=AsyncMock, return_value=expected):
+            executor = TaskExecutor(
+                config=config,
+                browser_manager=mock_browser_manager,
+                llm_client=MagicMock(),
+            )
+            result = await executor.execute()
 
         assert result.success is True
         assert result.error is None

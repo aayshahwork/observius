@@ -1,46 +1,21 @@
-"""Reliability subsystem — failure detectors, repair playbooks, and circuit breaker."""
+"""
+workers/reliability — Self-healing repair layer for the PAV loop.
 
-from workers.reliability.circuit_breaker import CircuitBreaker
-from workers.reliability.detectors import (
-    detect_failure,
-    detect_from_error_code,
-    detect_from_error_text,
-    detect_from_network_signals,
-    detect_from_outcome,
-    detect_from_url,
-    detect_stuck,
-)
-from workers.reliability.playbooks import (
-    REPAIR_PLAYBOOK,
-    RepairAction,
-    repair_action_to_intent,
-)
-from workers.reliability.repair_loop import (
-    BackendCapabilities,
-    CUABackend,
-    Planner,
-    SubGoal,
-    Validator,
-    run_repair,
-)
+Classifies failures, checks circuit breakers, and executes repair
+playbooks before falling through to replan.
+"""
+
+from .circuit_breaker import CircuitBreaker
+from .detectors import classify_outcome, detect_failure
+from .playbooks import RepairAction, RepairStrategy, get_playbook
+from .repair_loop import run_repair
 
 __all__ = [
     "CircuitBreaker",
-    "REPAIR_PLAYBOOK",
-    "RepairAction",
+    "classify_outcome",
     "detect_failure",
-    "detect_from_error_code",
-    "detect_from_error_text",
-    "detect_from_network_signals",
-    "detect_from_outcome",
-    "detect_from_url",
-    "detect_stuck",
-    "repair_action_to_intent",
+    "RepairAction",
+    "RepairStrategy",
+    "get_playbook",
     "run_repair",
-    # Protocols — for callers who want to type-check their implementations
-    "BackendCapabilities",
-    "CUABackend",
-    "Planner",
-    "SubGoal",
-    "Validator",
 ]

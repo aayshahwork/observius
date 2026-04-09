@@ -1,18 +1,23 @@
-"""Shared types for the workers module — imported by both backend abstraction and reliability subsystem."""
+"""
+workers/shared_types — Shared type definitions for the Pokant architecture upgrade.
 
-from workers.shared_types.actions import GroundingRung, StepIntent, StepResult
-from workers.shared_types.budget import Budget
-from workers.shared_types.observations import Observation
-from workers.shared_types.taxonomy import FailureClass
-from workers.shared_types.validation import ValidatorOutcome, ValidatorVerdict
+Both Person A (backend/PAV) and Person B (reliability/retry) import from here
+so they share a single set of data structures.
+"""
+
+from .observations import Observation
+from .actions import GroundingRung, StepIntent, StepResult
+from .validation import ValidatorVerdict, ValidatorOutcome
+from .taxonomy import FailureClass
+from .budget import Budget
 
 __all__ = [
-    "Budget",
-    "FailureClass",
-    "GroundingRung",
     "Observation",
+    "GroundingRung",
     "StepIntent",
     "StepResult",
-    "ValidatorOutcome",
     "ValidatorVerdict",
+    "ValidatorOutcome",
+    "FailureClass",
+    "Budget",
 ]

@@ -106,6 +106,29 @@ export const NATIVE_TASK: TaskResponse = {
   executor_mode: "native",
 };
 
+/** A Skyvern cloud API task. */
+export const SKYVERN_TASK: TaskResponse = {
+  task_id: "ffff0006-0000-7000-8000-000000000006",
+  url: "https://skyvern.example.com",
+  task_description: "Skyvern cloud extraction task",
+  status: "completed",
+  success: true,
+  result: { data: "extracted" },
+  error: null,
+  replay_url: null,
+  steps: 4,
+  duration_ms: 8_000,
+  created_at: "2025-03-28T13:00:00.000Z",
+  completed_at: "2025-03-28T13:00:08.000Z",
+  retry_count: 0,
+  retry_of_task_id: null,
+  error_category: null,
+  cost_cents: 10,
+  total_tokens_in: 0,
+  total_tokens_out: 0,
+  executor_mode: "skyvern",
+};
+
 /** An SDK-tracked task (no browser page). */
 export const SDK_TASK: TaskResponse = {
   task_id: "eeee0005-0000-7000-8000-000000000005",

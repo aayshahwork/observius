@@ -19,6 +19,25 @@ import type { TaskResponse } from "@/lib/types";
 export type SortField = "created_at" | "duration_ms" | "steps" | "cost_cents";
 export type SortOrder = "asc" | "desc";
 
+const ENGINE_BADGE_CONFIG: Record<string, { label: string; className: string }> = {
+  browser_use: { label: "BU", className: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800" },
+  native: { label: "CUA", className: "bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-800" },
+  skyvern: { label: "SKY", className: "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800" },
+  sdk: { label: "SDK", className: "bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800/50 dark:text-gray-400 dark:border-gray-700" },
+};
+
+function EngineBadge({ mode }: { mode: string }) {
+  const config = ENGINE_BADGE_CONFIG[mode] ?? ENGINE_BADGE_CONFIG.browser_use;
+  return (
+    <Badge
+      variant="outline"
+      className={`px-1.5 py-0 text-[10px] leading-4 font-medium border ${config.className}`}
+    >
+      {config.label}
+    </Badge>
+  );
+}
+
 function truncateUrl(url: string, maxLen = 40): string {
   try {
     const u = new URL(url);
@@ -100,6 +119,7 @@ export function TaskTable({
           <TableHead>Status</TableHead>
           <TableHead>Description</TableHead>
           <TableHead className="hidden md:table-cell">URL</TableHead>
+          <TableHead className="hidden sm:table-cell">Engine</TableHead>
           <SortableHead
             field="steps"
             activeField={sortField}
@@ -148,22 +168,6 @@ export function TaskTable({
             <TableCell>
               <div className="flex items-center gap-1.5">
                 <StatusBadge status={task.status} />
-                {task.executor_mode === "native" && (
-                  <Badge
-                    variant="outline"
-                    className="px-1 py-0 text-[10px] leading-4 font-normal"
-                  >
-                    N
-                  </Badge>
-                )}
-                {task.executor_mode === "sdk" && (
-                  <Badge
-                    variant="outline"
-                    className="px-1 py-0 text-[10px] leading-4 font-normal"
-                  >
-                    SDK
-                  </Badge>
-                )}
                 {task.status === "failed" && task.analysis && task.analysis.findings.length > 0 && (
                   <Badge
                     variant="outline"
@@ -180,6 +184,9 @@ export function TaskTable({
             </TableCell>
             <TableCell className="hidden md:table-cell text-muted-foreground">
               {truncateUrl(task.url ?? "")}
+            </TableCell>
+            <TableCell className="hidden sm:table-cell">
+              <EngineBadge mode={task.executor_mode} />
             </TableCell>
             <TableCell className="text-right tabular-nums">
               {task.steps}

@@ -1,171 +1,133 @@
-"""Repair playbooks — map each FailureClass to an ordered list of repair actions.
+"""
+workers/reliability/playbooks.py — Static repair playbooks per FailureClass.
 
-The executor walks the list top-to-bottom, attempting each repair until the step
-succeeds or the list is exhausted.  Empty lists mean "no mechanical repair —
-escalate to cognitive patch or fail closed."
+Each playbook is a list[RepairAction] ordered by preference. The repair
+loop tries actions in order until one succeeds or falls through to replan.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
 
-from workers.shared_types import FailureClass, StepIntent
+from workers.shared_types import FailureClass
 
 
-class RepairAction(StrEnum):
-    """Atomic repair actions the executor can attempt."""
+class RepairStrategy(StrEnum):
+    """What the repair loop should do."""
 
-    # UI repairs
-    SCROLL_SEARCH = "scroll_search"
-    BROADEN_LOCATOR = "broaden_locator"
-    SWITCH_TO_VISION = "switch_to_vision"
-    CLOSE_OVERLAY = "close_overlay"
-    CLOSE_MODAL = "close_modal"
-    WAIT_STABILITY = "wait_stability"
-    SCROLL_INTO_VIEW = "scroll_into_view"
-    DISMISS_DIALOG = "dismiss_dialog"
-    SWITCH_FRAME = "switch_frame"
-
-    # Navigation repairs
-    BACKTRACK = "backtrack"
-    USE_SITE_SEARCH = "use_site_search"
+    WAIT_AND_RETRY = "wait_and_retry"
     REFRESH_PAGE = "refresh_page"
-    RESTART_FROM_CHECKPOINT = "restart_checkpoint"
-
-    # Auth/session repairs
-    RE_AUTH = "re_auth"
-    REFRESH_SESSION = "refresh_session"
-
-    # Escalation
-    ESCALATE_HUMAN = "escalate_human"
+    SCROLL_AND_RETRY = "scroll_and_retry"
+    DISMISS_OVERLAY = "dismiss_overlay"
+    RE_NAVIGATE = "re_navigate"
+    REPLAN = "replan"
+    ABORT = "abort"
 
 
-REPAIR_PLAYBOOK: dict[FailureClass, list[RepairAction]] = {
-    # UI/Interaction
-    FailureClass.ELEMENT_NOT_FOUND: [
-        RepairAction.SCROLL_SEARCH,
-        RepairAction.WAIT_STABILITY,
-        RepairAction.BROADEN_LOCATOR,
-        RepairAction.SWITCH_TO_VISION,
+@dataclass(frozen=True)
+class RepairAction:
+    """A single repair step."""
+
+    strategy: RepairStrategy
+    wait_seconds: float = 0.0
+    description: str = ""
+
+
+# ---------------------------------------------------------------------------
+# Static playbook table
+# ---------------------------------------------------------------------------
+
+_PLAYBOOKS: dict[FailureClass, list[RepairAction]] = {
+    # -- LLM -----------------------------------------------------------------
+    FailureClass.LLM_OVERLOADED: [
+        RepairAction(RepairStrategy.WAIT_AND_RETRY, wait_seconds=10.0, description="Wait for LLM capacity"),
     ],
-    FailureClass.ELEMENT_NOT_CLICKABLE: [
-        RepairAction.WAIT_STABILITY,
-        RepairAction.SCROLL_INTO_VIEW,
-        RepairAction.CLOSE_OVERLAY,
+    FailureClass.LLM_RATE_LIMITED: [
+        RepairAction(RepairStrategy.WAIT_AND_RETRY, wait_seconds=5.0, description="Back off rate limit"),
     ],
-    FailureClass.ELEMENT_OBSCURED: [
-        RepairAction.CLOSE_OVERLAY,
-        RepairAction.CLOSE_MODAL,
-        RepairAction.SCROLL_INTO_VIEW,
+    FailureClass.LLM_AUTH_FAILED: [
+        RepairAction(RepairStrategy.ABORT, description="LLM auth failed — cannot recover"),
     ],
-    FailureClass.UNEXPECTED_MODAL: [
-        RepairAction.CLOSE_MODAL,
-        RepairAction.DISMISS_DIALOG,
+    FailureClass.LLM_BAD_REQUEST: [
+        RepairAction(RepairStrategy.REPLAN, description="LLM bad request — replan with different prompt"),
     ],
-    FailureClass.NAVIGATION_LOOP: [
-        RepairAction.BACKTRACK,
-        RepairAction.USE_SITE_SEARCH,
-        RepairAction.RESTART_FROM_CHECKPOINT,
-    ],
-    FailureClass.WRONG_FRAME: [
-        RepairAction.SWITCH_FRAME,
-    ],
-    FailureClass.STALE_ELEMENT: [
-        RepairAction.REFRESH_PAGE,
-        RepairAction.WAIT_STABILITY,
-    ],
-    FailureClass.STUCK: [
-        RepairAction.SCROLL_SEARCH,
-        RepairAction.REFRESH_PAGE,
-        RepairAction.BACKTRACK,
+    FailureClass.LLM_CONTEXT_OVERFLOW: [
+        RepairAction(RepairStrategy.REPLAN, description="Context overflow — replan with shorter context"),
     ],
 
-    # Auth/session
-    FailureClass.AUTH_REQUIRED: [
-        RepairAction.RE_AUTH,
-        RepairAction.REFRESH_SESSION,
+    # -- Browser --------------------------------------------------------------
+    FailureClass.BROWSER_CRASH: [
+        RepairAction(RepairStrategy.ABORT, description="Browser crashed — cannot recover in-loop"),
     ],
-    FailureClass.SESSION_EXPIRED: [
-        RepairAction.REFRESH_SESSION,
-        RepairAction.RE_AUTH,
+    FailureClass.BROWSER_TIMEOUT: [
+        RepairAction(RepairStrategy.WAIT_AND_RETRY, wait_seconds=3.0, description="Wait and retry after timeout"),
+        RepairAction(RepairStrategy.RE_NAVIGATE, description="Re-navigate to current URL"),
+    ],
+    FailureClass.BROWSER_NAVIGATION: [
+        RepairAction(RepairStrategy.WAIT_AND_RETRY, wait_seconds=2.0, description="Wait and retry navigation"),
+        RepairAction(RepairStrategy.RE_NAVIGATE, description="Attempt re-navigation"),
+    ],
+    FailureClass.BROWSER_ELEMENT_MISSING: [
+        RepairAction(RepairStrategy.SCROLL_AND_RETRY, description="Scroll to reveal element"),
+        RepairAction(RepairStrategy.WAIT_AND_RETRY, wait_seconds=2.0, description="Wait for element to appear"),
+    ],
+    FailureClass.BROWSER_ELEMENT_BLOCKED: [
+        RepairAction(RepairStrategy.DISMISS_OVERLAY, description="Dismiss blocking overlay"),
+    ],
+    FailureClass.BROWSER_CLICK_INTERCEPTED: [
+        RepairAction(RepairStrategy.DISMISS_OVERLAY, description="Dismiss intercepting overlay"),
     ],
 
-    # Network/Infra
-    FailureClass.CAPTCHA_CHALLENGE: [
-        RepairAction.ESCALATE_HUMAN,
+    # -- Network --------------------------------------------------------------
+    FailureClass.NETWORK_TIMEOUT: [
+        RepairAction(RepairStrategy.WAIT_AND_RETRY, wait_seconds=5.0, description="Wait after network timeout"),
+    ],
+    FailureClass.NETWORK_DNS: [
+        RepairAction(RepairStrategy.WAIT_AND_RETRY, wait_seconds=3.0, description="Wait for DNS resolution"),
+    ],
+    FailureClass.NETWORK_CONNECTION: [
+        RepairAction(RepairStrategy.WAIT_AND_RETRY, wait_seconds=3.0, description="Wait for connection recovery"),
+    ],
+
+    # -- Anti-bot -------------------------------------------------------------
+    FailureClass.ANTI_BOT_CAPTCHA: [
+        RepairAction(RepairStrategy.REPLAN, description="Captcha detected — replan with solver"),
+    ],
+    FailureClass.ANTI_BOT_RATE_LIMITED: [
+        RepairAction(RepairStrategy.WAIT_AND_RETRY, wait_seconds=10.0, description="Wait out site rate limit"),
     ],
     FailureClass.ANTI_BOT_BLOCKED: [
-        RepairAction.REFRESH_PAGE,
-        RepairAction.ESCALATE_HUMAN,
+        RepairAction(RepairStrategy.ABORT, description="Bot blocked — cannot recover"),
     ],
-    FailureClass.NETWORK_TIMEOUT: [
-        RepairAction.REFRESH_PAGE,
+
+    # -- Auth -----------------------------------------------------------------
+    FailureClass.AUTH_REQUIRED: [
+        RepairAction(RepairStrategy.REPLAN, description="Auth required — replan to login first"),
     ],
-    FailureClass.PROXY_FAILURE: [],
+    FailureClass.AUTH_SESSION_EXPIRED: [
+        RepairAction(RepairStrategy.REPLAN, description="Session expired — replan to re-authenticate"),
+    ],
 
-    # Task/Goal — cognitive patch only
-    FailureClass.GOAL_NOT_MET: [],
-    FailureClass.FALSE_SUCCESS: [],
-    FailureClass.INCOMPLETE_EXECUTION: [],
+    # -- Agent ----------------------------------------------------------------
+    FailureClass.AGENT_LOOP: [
+        RepairAction(RepairStrategy.REFRESH_PAGE, description="Refresh page to break loop"),
+    ],
+    FailureClass.AGENT_EXHAUSTED_STEPS: [
+        RepairAction(RepairStrategy.REPLAN, description="Steps exhausted — replan with fewer goals"),
+    ],
 
-    # Policy/Safety — fail closed
-    FailureClass.POLICY_VIOLATION: [],
-    FailureClass.CONSENT_REQUIRED: [],
-    FailureClass.PII_EXPOSURE_RISK: [],
-
-    # Meta
-    FailureClass.BUDGET_EXCEEDED: [],
-    FailureClass.UNKNOWN: [],
+    # -- Unknown --------------------------------------------------------------
+    FailureClass.UNKNOWN: [
+        RepairAction(RepairStrategy.REPLAN, description="Unknown failure — fall through to replan"),
+    ],
 }
 
+_DEFAULT_PLAYBOOK: list[RepairAction] = [
+    RepairAction(RepairStrategy.REPLAN, description="No playbook — fall through to replan"),
+]
 
-def repair_action_to_intent(
-    action: RepairAction,
-    context: dict[str, Any] | None = None,
-) -> StepIntent:
-    """Convert a repair action to a concrete StepIntent."""
-    ctx = context or {}
 
-    match action:
-        case RepairAction.SCROLL_SEARCH:
-            return StepIntent(action="scroll", target={"direction": "down", "amount": "page"})
-        case RepairAction.CLOSE_OVERLAY | RepairAction.CLOSE_MODAL:
-            return StepIntent(action="click", target={"strategy": "role", "role": "button", "name": "Close"})
-        case RepairAction.DISMISS_DIALOG:
-            return StepIntent(action="key_press", target={}, value="Escape")
-        case RepairAction.WAIT_STABILITY:
-            return StepIntent(action="wait", target={}, value="2000")
-        case RepairAction.REFRESH_PAGE:
-            return StepIntent(action="navigate", target={}, value=ctx.get("current_url", ""))
-        case RepairAction.BACKTRACK:
-            return StepIntent(action="go_back", target={})
-        case RepairAction.SCROLL_INTO_VIEW:
-            original_target = ctx.get("original_target", {})
-            return StepIntent(
-                action="scroll",
-                target=original_target,
-                metadata={"missing_target": True} if not original_target else {},
-            )
-        case RepairAction.RE_AUTH:
-            return StepIntent(
-                action="navigate", target={},
-                value=ctx.get("login_url", ""),
-                metadata={"auth_flow": True},
-            )
-        case RepairAction.REFRESH_SESSION:
-            return StepIntent(action="wait", target={}, value="1000", metadata={"refresh_session": True})
-        case RepairAction.BROADEN_LOCATOR:
-            return StepIntent(action="wait", target={}, value="500", metadata={"broaden_locator": True})
-        case RepairAction.SWITCH_TO_VISION:
-            return StepIntent(action="wait", target={}, value="500", metadata={"switch_to_vision": True})
-        case RepairAction.USE_SITE_SEARCH:
-            return StepIntent(action="wait", target={}, value="500", metadata={"use_site_search": True})
-        case RepairAction.RESTART_FROM_CHECKPOINT:
-            return StepIntent(action="navigate", target={}, value=ctx.get("checkpoint_url", ""))
-        case RepairAction.SWITCH_FRAME:
-            return StepIntent(action="wait", target={}, value="500", metadata={"switch_frame": True})
-        case RepairAction.ESCALATE_HUMAN:
-            return StepIntent(action="wait", target={}, value="0", metadata={"escalate_human": True})
-        case _:
-            return StepIntent(action="wait", target={}, value="1000")
+def get_playbook(failure_class: FailureClass) -> list[RepairAction]:
+    """Return the ordered list of repair actions for a failure class."""
+    return _PLAYBOOKS.get(failure_class, _DEFAULT_PLAYBOOK)

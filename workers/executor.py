@@ -214,26 +214,87 @@ class TaskExecutor:
                 pass
 
     async def execute(self) -> TaskResult:
-        """Execute the task end-to-end.
+        """Execute the task through the Plan-Act-Validate loop.
 
-        1. Generate task_id, record start_time.
-        2. Acquire browser, create page (1280x720), apply stealth.
-        2b. Restore session cookies if session_id is set (Hook B/C).
-        3. Navigate to config.url (with retry), capture step 1.
-        3b. Verify restored session is still valid (Hook D).
-        4. Run browser_use Agent via _execute_with_agent.
-        4b. Save session cookies on success (Hook G).
-        5. Cleanup browser and async DB session in finally block.
-        6. Return TaskResult.
+        1. Create backend, planner, validator, and budget.
+        2. Delegate to run_pav_loop for orchestration.
+        3. PAV loop handles: plan decomposition, subgoal execution,
+           validation, replanning, and result construction.
         """
         task_id = str(uuid.uuid4())
         start_time = time.monotonic()
-        # Use shared list if provided (allows shutdown handler to see
-        # accumulated steps for partial replay generation).
         self.steps = self._shared_step_data if self._shared_step_data is not None else []
-        browser = None
-        async_db_session = None
 
+        try:
+            from workers.backends.registry import backend_for_task
+            from workers.pav.loop import run_pav_loop
+            from workers.pav.planner import Planner
+            from workers.pav.validator import Validator
+            from workers.reliability import CircuitBreaker, run_repair
+            from workers.shared_types import Budget
+
+            backend = backend_for_task(self.config)
+            llm_client = self._get_llm_client()
+            planner = Planner(llm_client=llm_client)
+            validator = Validator(llm_client=llm_client)
+            circuit_breaker = CircuitBreaker(max_consecutive=3)
+            budget = Budget(
+                max_steps=self.config.max_steps or 50,
+                max_cost_cents=float(self.config.max_cost_cents or 0),
+                max_seconds=float(self.config.timeout_seconds or 0),
+            )
+
+            async def repair_fn(outcome, subgoal, be, pl, va):
+                return await run_repair(
+                    outcome, subgoal, be, pl, va,
+                    circuit_breaker=circuit_breaker,
+                )
+
+            return await run_pav_loop(
+                task_config=self.config,
+                backend=backend,
+                planner=planner,
+                validator=validator,
+                budget=budget,
+                repair_fn=repair_fn,
+                on_step=self._persist_step,
+            )
+
+        except Exception as exc:
+            logger.exception("Task %s failed: %s", task_id, exc)
+            return TaskResult(
+                task_id=task_id,
+                status="failed",
+                success=False,
+                error=str(exc),
+                steps=len(self.steps),
+                duration_ms=int((time.monotonic() - start_time) * 1000),
+                cost_cents=0.0,
+                total_tokens_in=sum(s.tokens_in for s in self.steps),
+                total_tokens_out=sum(s.tokens_out for s in self.steps),
+                step_data=self.steps,
+            )
+
+    def _get_llm_client(self) -> Any:
+        """Return an async messages client for planner and validator."""
+        from anthropic import AsyncAnthropic
+        return AsyncAnthropic(
+            api_key=worker_settings.ANTHROPIC_API_KEY,
+        ).messages
+
+    def _persist_step(self, step_result: Any) -> None:
+        """Append StepResult to shared step list for real-time visibility."""
+        from workers.pav.loop import step_result_to_step_data
+        step_data = step_result_to_step_data(step_result, len(self.steps) + 1)
+        self.steps.append(step_data)
+
+    # ------------------------------------------------------------------
+    # Legacy methods below — preserved for backward compatibility.
+    # No longer called by execute() after the PAV rewire.
+    # ------------------------------------------------------------------
+
+    async def _execute_legacy_noop(self) -> None:
+        """Placeholder — old execute() body superseded by run_pav_loop."""
         # -- Session manager setup (lazy, only when session_id is present) --
         session_manager = None
         if self.account_id and self.config.session_id:

@@ -1,206 +1,197 @@
-"""Repair loop — three-phase recovery when validation fails.
+"""
+workers/reliability/repair_loop.py — Self-healing repair loop.
 
-Phase 1: Detect + classify the failure
-Phase 2: Try deterministic patches from the playbook (in order)
-Phase 3: If all deterministic patches fail, try cognitive patch (LLM replan)
+Classifies the failure, checks the circuit breaker, executes a repair
+playbook action, and returns whether the subgoal should be re-attempted.
 
-Called as ``repair_fn`` from the PAV loop.
+Optionally integrates with episodic memory to prioritize known-good fixes.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
-from urllib.parse import urlparse
+from typing import TYPE_CHECKING
+
+from workers.reliability.circuit_breaker import CircuitBreaker
+from workers.reliability.detectors import classify_outcome
+from workers.reliability.playbooks import RepairAction, RepairStrategy, get_playbook
+from workers.shared_types import ValidatorOutcome
 
 if TYPE_CHECKING:
+    from workers.backends.protocol import CUABackend
     from workers.memory.episodic import EpisodicMemory
-
-from workers.shared_types import (
-    FailureClass,
-    Observation,
-    StepIntent,
-    StepResult,
-    ValidatorOutcome,
-    ValidatorVerdict,
-)
-from workers.reliability.circuit_breaker import CircuitBreaker
-from workers.reliability.detectors import detect_failure
-from workers.reliability.playbooks import (
-    REPAIR_PLAYBOOK,
-    RepairAction,
-    repair_action_to_intent,
-)
+    from workers.pav.planner import Planner
+    from workers.pav.types import SubGoal
+    from workers.pav.validator import Validator
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Placeholder — replaced with real import when SubGoal is defined
-# ---------------------------------------------------------------------------
-
-@runtime_checkable
-class SubGoal(Protocol):
-    """Minimal shape the repair loop needs from a subgoal."""
-
-    description: str
-    attempts: int
-
-
-# ---------------------------------------------------------------------------
-# Protocols for collaborators not yet concretely typed
-# ---------------------------------------------------------------------------
-
-@runtime_checkable
-class BackendCapabilities(Protocol):
-    supports_single_step: bool
-
-
-@runtime_checkable
-class CUABackend(Protocol):
-    capabilities: BackendCapabilities
-
-    async def execute_step(self, intent: StepIntent) -> StepResult: ...
-    async def get_observation(self) -> Observation: ...
-
-
-@runtime_checkable
-class Planner(Protocol):
-    async def replan(
-        self,
-        subgoal: SubGoal,
-        outcome: ValidatorOutcome,
-        failure_class_value: str,
-    ) -> None: ...
-
-
-@runtime_checkable
-class Validator(Protocol):
-    async def validate(
-        self,
-        subgoal: SubGoal,
-        intent: StepIntent,
-        result: StepResult,
-    ) -> ValidatorOutcome: ...
-
-
-# ---------------------------------------------------------------------------
-# run_repair
-# ---------------------------------------------------------------------------
 
 async def run_repair(
     outcome: ValidatorOutcome,
-    subgoal: SubGoal,
-    backend: CUABackend,
-    planner: Planner,
-    validator: Validator,
+    subgoal: "SubGoal",
+    backend: "CUABackend",
+    planner: "Planner",
+    validator: "Validator",
+    *,
     circuit_breaker: CircuitBreaker | None = None,
-    previous_dom_hash: str | None = None,
     episodic_memory: "EpisodicMemory | None" = None,
-) -> ValidatorOutcome | None:
-    """Three-phase repair attempted by the PAV loop on validation failure.
+) -> bool:
+    """Attempt to repair a failed subgoal outcome.
 
-    Returns a :class:`ValidatorOutcome` when repair succeeds (verdict ``PASS``
-    or ``UNCERTAIN`` after replanning), or ``None`` when all options are
-    exhausted.
+    Returns True if the repair succeeded and the subgoal should be
+    re-attempted, False to fall through to replan.
+
+    Side effects:
+    - Stamps ``outcome.failure_class`` with the classified failure.
+    - Stamps ``outcome.patch_applied`` with the strategy used (if any).
     """
+    # -- Classify --
+    fc = classify_outcome(outcome)
+    outcome.failure_class = fc.value
 
-    # ------------------------------------------------------------------
-    # Phase 1 — Classify
-    # ------------------------------------------------------------------
-    observation: Observation = outcome.evidence.get("observation") or await backend.get_observation()
-    result: StepResult = outcome.evidence.get("result") or StepResult(
-        success=False, observation=observation,
+    group = fc.group
+
+    logger.info(
+        "repair_loop: subgoal=%s failure_class=%s group=%s",
+        subgoal.id,
+        fc.value,
+        group,
     )
-    failure_class: FailureClass = await detect_failure(
-        outcome, result, observation, previous_dom_hash,
-    )
 
-    if circuit_breaker is not None:
-        circuit_breaker.record_failure(failure_class)
-        if circuit_breaker.should_stop():
-            logger.warning("Circuit breaker tripped — dominant: %s", circuit_breaker.dominant_failure())
-            return None
+    # -- Circuit breaker --
+    if circuit_breaker is not None and not circuit_breaker.allow_attempt(group):
+        logger.warning(
+            "repair_loop: circuit breaker tripped for group=%s, falling through",
+            group,
+        )
+        return False
 
-    # ------------------------------------------------------------------
-    # Phase 2 — Deterministic patches (with memory-backed prioritisation)
-    # ------------------------------------------------------------------
-    patches: list[RepairAction] = list(REPAIR_PLAYBOOK.get(failure_class, []))
+    # -- Get playbook (optionally prioritised by episodic memory) --
+    playbook = list(get_playbook(fc))
 
     if episodic_memory is not None:
         try:
-            domain = _extract_domain(observation.url or "")
-            known = await episodic_memory.get_known_fixes(failure_class.value, domain)
-            known_actions: list[RepairAction] = []
+            known = await episodic_memory.get_known_fixes(fc.value)
+            known_strategies: list[RepairAction] = []
             for fix in known:
                 try:
-                    known_actions.append(RepairAction(fix["repair_action"]))
-                except ValueError:
+                    strategy = RepairStrategy(fix["repair_strategy"])
+                    known_strategies.append(RepairAction(strategy, description=f"memory: {fix.get('description', '')}"))
+                except (ValueError, KeyError):
                     pass
-            # Prepend known-good actions; keep remaining playbook actions deduplicated
-            seen = set(known_actions)
-            patches = known_actions + [a for a in patches if a not in seen]
+            if known_strategies:
+                # Prepend memory-backed actions; keep remaining playbook actions deduplicated
+                seen_strategies = {a.strategy for a in known_strategies}
+                playbook = known_strategies + [a for a in playbook if a.strategy not in seen_strategies]
         except Exception:
-            logger.warning("Episodic memory unavailable; skipping known-fix lookup")
+            logger.warning("repair_loop: episodic memory unavailable; skipping known-fix lookup")
 
-    context: dict[str, Any] = {
-        "current_url": observation.url,
-        "original_target": outcome.evidence.get("target", {}),
-        "login_url": outcome.evidence.get("login_url", ""),
-    }
+    if not playbook:
+        return False
 
-    for patch_action in patches:
-        # ESCALATE_HUMAN — signal without executing
-        if patch_action == RepairAction.ESCALATE_HUMAN:
-            return ValidatorOutcome(
-                verdict=ValidatorVerdict.FAIL_POLICY,
-                failure_class=failure_class.value,
-                message=f"Escalation needed: {failure_class.value}",
-                evidence={"escalation": True},
-            )
+    # Execute the first action in the playbook
+    action = playbook[0]
 
-        # Skip fine-grained patches on delegation-only backends
-        if not backend.capabilities.supports_single_step:
-            continue
-
-        intent = repair_action_to_intent(patch_action, context)
-        try:
-            repair_result = await backend.execute_step(intent)
-            repair_outcome = await validator.validate(subgoal, intent, repair_result)
-
-            if repair_outcome.verdict == ValidatorVerdict.PASS:
-                if episodic_memory is not None:
-                    try:
-                        domain = _extract_domain(observation.url or "")
-                        await episodic_memory.record_failure_fix(
-                            failure_class.value,
-                            patch_action.value,
-                            success=True,
-                            domain=domain,
-                        )
-                    except Exception:
-                        pass
-                return repair_outcome
-        except Exception:
-            continue  # patch failed, try next
-
-    # ------------------------------------------------------------------
-    # Phase 3 — Cognitive patch (LLM replan)
-    # ------------------------------------------------------------------
     try:
-        await planner.replan(subgoal, outcome, failure_class.value)
-        return ValidatorOutcome(
-            verdict=ValidatorVerdict.UNCERTAIN,
-            message=f"Replanned after {failure_class.value}",
-            failure_class=failure_class.value,
+        success = await _execute_repair_action(action, backend)
+    except Exception as exc:
+        logger.debug("repair_loop: repair action failed: %s", exc)
+        success = False
+
+    # -- Record on circuit breaker --
+    if circuit_breaker is not None:
+        if success:
+            circuit_breaker.record_success(group)
+        else:
+            circuit_breaker.record_failure(group)
+
+    if success:
+        outcome.patch_applied = action.strategy.value
+        logger.info(
+            "repair_loop: applied %s for %s",
+            action.strategy.value,
+            fc.value,
         )
-    except Exception:
-        return None  # exhausted
+
+        # Record fix in episodic memory
+        if episodic_memory is not None:
+            try:
+                await episodic_memory.record_failure_fix(
+                    fc.value,
+                    action.strategy.value,
+                    success=True,
+                )
+            except Exception:
+                pass
+
+    return success
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+async def _execute_repair_action(action: RepairAction, backend: "CUABackend") -> bool:
+    """Execute a single repair action. Returns True if the subgoal should be retried."""
+    strategy = action.strategy
 
-def _extract_domain(url: str) -> str:
-    """Return the hostname from a URL, or '' if unparseable."""
-    return urlparse(url).hostname or ""
+    if strategy in (RepairStrategy.ABORT, RepairStrategy.REPLAN):
+        return False
+
+    if strategy == RepairStrategy.WAIT_AND_RETRY:
+        if action.wait_seconds > 0:
+            await asyncio.sleep(action.wait_seconds)
+        return True
+
+    if strategy == RepairStrategy.REFRESH_PAGE:
+        from workers.shared_types import StepIntent
+        try:
+            await backend.execute_step(StepIntent(
+                action_type="navigate",
+                description="Refresh current page (repair)",
+            ))
+        except Exception:
+            try:
+                await backend.execute_goal("Refresh the current page", max_steps=2)
+            except Exception:
+                return False
+        return True
+
+    if strategy == RepairStrategy.RE_NAVIGATE:
+        from workers.shared_types import StepIntent
+        try:
+            await backend.execute_step(StepIntent(
+                action_type="navigate",
+                description="Re-navigate to current URL (repair)",
+            ))
+        except Exception:
+            try:
+                await backend.execute_goal("Navigate back to the current page", max_steps=2)
+            except Exception:
+                return False
+        return True
+
+    if strategy == RepairStrategy.SCROLL_AND_RETRY:
+        from workers.shared_types import StepIntent
+        try:
+            await backend.execute_step(StepIntent(
+                action_type="scroll",
+                description="Scroll down to reveal element (repair)",
+            ))
+        except Exception:
+            try:
+                await backend.execute_goal("Scroll down the page", max_steps=2)
+            except Exception:
+                return False
+        return True
+
+    if strategy == RepairStrategy.DISMISS_OVERLAY:
+        try:
+            await backend.execute_goal(
+                "Dismiss any popup, overlay, cookie banner, or modal that is blocking the page",
+                max_steps=3,
+            )
+        except Exception:
+            return False
+        return True
+
+    # Unknown strategy — don't retry
+    return False

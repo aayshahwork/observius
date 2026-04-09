@@ -79,9 +79,12 @@ class TaskCreateRequest(BaseModel):
     max_cost_cents: int | None = Field(default=None, gt=0)
     executor_mode: str = Field(
         default="browser_use",
-        pattern=r"^(browser_use|native)$",
-        description="Executor mode: 'browser_use' (DOM-based) or 'native' (screenshot pixel-based)",
+        pattern=r"^(browser_use|native|skyvern)$",
+        description="Executor mode: 'browser_use' (DOM-based), 'native' (screenshot pixel-based), or 'skyvern' (Skyvern cloud API)",
     )
+    skyvern_engine: str | None = Field(default=None, description="Skyvern engine version (e.g. 'skyvern-2.0')")
+    proxy_location: str | None = Field(default=None, description="Proxy location for Skyvern (e.g. 'RESIDENTIAL')")
+    data_extraction_schema: dict[str, Any] | None = Field(default=None, description="JSON schema for Skyvern data extraction")
 
 
 # ---------------------------------------------------------------------------
