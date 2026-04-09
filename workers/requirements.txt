@@ -10,6 +10,7 @@ cryptography
 boto3
 requests
 sqlalchemy
+asyncpg
 psycopg2-binary
 prometheus_client
 # Minimum versions to fix known CVEs in transitive deps
