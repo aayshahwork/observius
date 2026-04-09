@@ -312,7 +312,13 @@ class TestListTasks:
         scalars_mock.all.return_value = tasks
         tasks_result.scalars.return_value = scalars_mock
 
-        mock_db.execute = AsyncMock(side_effect=[count_result, tasks_result])
+        # list_tasks also fetches repair_rows and failure_rows per-page (2 extra queries)
+        repair_result = MagicMock()
+        repair_result.all.return_value = []
+        failure_result = MagicMock()
+        failure_result.all.return_value = []
+
+        mock_db.execute = AsyncMock(side_effect=[count_result, tasks_result, repair_result, failure_result])
 
         resp = client.get("/api/v1/tasks?limit=10&offset=0")
         assert resp.status_code == 200

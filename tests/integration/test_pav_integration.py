@@ -149,12 +149,23 @@ def _make_task_config() -> TaskConfig:
     return TaskConfig(url="https://example.com", task="Test task")
 
 
+def _make_mock_memory():
+    """Create a mock episodic memory for tests."""
+    from unittest.mock import AsyncMock
+    mem = AsyncMock()
+    mem.get_known_fixes = AsyncMock(return_value=[])
+    mem.record_failure_fix = AsyncMock()
+    return mem
+
+
 def _make_repair_fn(backend, planner, validator, circuit_breaker=None):
     """Create a repair_fn closure compatible with run_pav_loop.
 
     PAV loop calls: repair_fn(outcome, subgoal, backend, planner, validator).
     We accept those positional args but use our closed-over circuit_breaker.
     """
+    mem = _make_mock_memory()
+
     async def repair_fn(outcome, subgoal, _backend, _planner, _validator):
         return await run_repair(
             outcome=outcome,
@@ -163,6 +174,7 @@ def _make_repair_fn(backend, planner, validator, circuit_breaker=None):
             planner=_planner,
             validator=_validator,
             circuit_breaker=circuit_breaker,
+            episodic_memory=mem,
         )
     return repair_fn
 
@@ -337,6 +349,7 @@ class TestRepairLoop:
             backend=backend,
             planner=planner,
             validator=validator,
+            episodic_memory=_make_mock_memory(),
         )
 
         # BROWSER_ELEMENT_MISSING playbook → SCROLL_AND_RETRY → True
@@ -456,6 +469,7 @@ class TestCircuitBreaker:
             planner=planner,
             validator=validator,
             circuit_breaker=cb,
+            episodic_memory=_make_mock_memory(),
         )
 
         # BROWSER_ELEMENT_MISSING → group="browser" → breaker tripped → False

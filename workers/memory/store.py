@@ -44,8 +44,12 @@ class MemoryStore:
         """Create the connection pool. Must be called before any other method."""
         if self._pool is not None:
             return
+        # asyncpg requires postgresql:// not SQLAlchemy's postgresql+asyncpg://
+        dsn = self._db_url.replace("postgresql+asyncpg://", "postgresql://").replace(
+            "postgres+asyncpg://", "postgres://"
+        )
         self._pool = await asyncpg.create_pool(
-            dsn=self._db_url,
+            dsn=dsn,
             min_size=1,
             max_size=5,
             command_timeout=30,

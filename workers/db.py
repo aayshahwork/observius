@@ -66,10 +66,10 @@ def _get_async_engine() -> Any:
         import ssl
         from sqlalchemy.ext.asyncio import create_async_engine as _cae
 
-        _is_remote = (
-            "localhost" not in worker_settings.DATABASE_URL
-            and "127.0.0.1" not in worker_settings.DATABASE_URL
-        )
+        import re as _re
+        _m = _re.search(r"@([^:/]+)", worker_settings.DATABASE_URL)
+        _host = _m.group(1) if _m else ""
+        _is_remote = bool(_host) and _host not in ("localhost", "127.0.0.1") and "." in _host
         if _is_remote:
             _ssl_ctx = ssl.create_default_context()
             _ssl_ctx.check_hostname = False

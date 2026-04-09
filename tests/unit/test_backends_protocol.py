@@ -121,7 +121,7 @@ class TestProtocolConformance:
     def test_teardown_runs(self, cls):
         instance = cls()
         # teardown should complete without error (it's a no-op on stubs)
-        asyncio.get_event_loop().run_until_complete(instance.teardown())
+        asyncio.run(instance.teardown())
 
 
 # ---------------------------------------------------------------------------

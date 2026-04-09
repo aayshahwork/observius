@@ -17,11 +17,15 @@ from unittest.mock import MagicMock, patch
 
 def _reset_shutdown_state() -> None:
     """Reset all module-level state between tests."""
+    import time
     from workers import shutdown
 
     shutdown._shutting_down.clear()
     shutdown._in_flight.clear()
-    shutdown._last_redis_check = 0.0
+    # Set to current time so the Redis poll interval hasn't elapsed — prevents
+    # the unit tests from actually connecting to Redis (which may be running
+    # locally with the worker_shutdown_flag key set from a previous run).
+    shutdown._last_redis_check = time.monotonic()
     shutdown._redis_shutdown_cached = False
 
 

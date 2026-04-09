@@ -243,12 +243,18 @@ class TestRunRepair:
         validator = AsyncMock()
         return backend, planner, validator
 
+    def _make_memory(self):
+        mem = AsyncMock()
+        mem.get_known_fixes = AsyncMock(return_value=[])
+        mem.record_failure_fix = AsyncMock()
+        return mem
+
     async def test_wait_and_retry_returns_true(self):
         outcome = self._make_outcome("timeout waiting for element")
         sg = self._make_subgoal()
         backend, planner, validator = self._make_mocks()
 
-        result = await run_repair(outcome, sg, backend, planner, validator)
+        result = await run_repair(outcome, sg, backend, planner, validator, episodic_memory=self._make_memory())
         assert result is True
         assert outcome.failure_class == "browser_timeout"
         assert outcome.patch_applied == "wait_and_retry"
@@ -258,7 +264,7 @@ class TestRunRepair:
         sg = self._make_subgoal()
         backend, planner, validator = self._make_mocks()
 
-        result = await run_repair(outcome, sg, backend, planner, validator)
+        result = await run_repair(outcome, sg, backend, planner, validator, episodic_memory=self._make_memory())
         assert result is False
         assert outcome.failure_class == "browser_crash"
         assert outcome.patch_applied is None
@@ -268,7 +274,7 @@ class TestRunRepair:
         sg = self._make_subgoal()
         backend, planner, validator = self._make_mocks()
 
-        result = await run_repair(outcome, sg, backend, planner, validator)
+        result = await run_repair(outcome, sg, backend, planner, validator, episodic_memory=self._make_memory())
         assert result is False
         assert outcome.failure_class == "unknown"
 
@@ -281,7 +287,7 @@ class TestRunRepair:
 
         result = await run_repair(
             outcome, sg, backend, planner, validator,
-            circuit_breaker=cb,
+            circuit_breaker=cb, episodic_memory=self._make_memory(),
         )
         assert result is False
 
@@ -291,7 +297,7 @@ class TestRunRepair:
         sg = self._make_subgoal()
         backend, planner, validator = self._make_mocks()
 
-        await run_repair(outcome, sg, backend, planner, validator, circuit_breaker=cb)
+        await run_repair(outcome, sg, backend, planner, validator, circuit_breaker=cb, episodic_memory=self._make_memory())
         # wait_and_retry succeeded, so CB should have reset browser group
         assert cb.allow_attempt("browser") is True
 
@@ -301,16 +307,16 @@ class TestRunRepair:
         sg = self._make_subgoal()
         backend, planner, validator = self._make_mocks()
 
-        await run_repair(outcome, sg, backend, planner, validator, circuit_breaker=cb)
+        await run_repair(outcome, sg, backend, planner, validator, circuit_breaker=cb, episodic_memory=self._make_memory())
         # abort returns False, CB should record failure
-        assert cb._counts.get("browser", 0) == 1
+        assert cb._group_counts.get("browser", 0) == 1
 
     async def test_dismiss_overlay_calls_execute_goal(self):
         outcome = self._make_outcome("element blocked by overlay, not clickable")
         sg = self._make_subgoal()
         backend, planner, validator = self._make_mocks()
 
-        result = await run_repair(outcome, sg, backend, planner, validator)
+        result = await run_repair(outcome, sg, backend, planner, validator, episodic_memory=self._make_memory())
         assert result is True
         backend.execute_goal.assert_called_once()
         assert "overlay" in backend.execute_goal.call_args[0][0].lower()
@@ -320,7 +326,7 @@ class TestRunRepair:
         sg = self._make_subgoal()
         backend, planner, validator = self._make_mocks()
 
-        result = await run_repair(outcome, sg, backend, planner, validator)
+        result = await run_repair(outcome, sg, backend, planner, validator, episodic_memory=self._make_memory())
         assert result is True
         backend.execute_step.assert_called_once()
 
@@ -329,7 +335,7 @@ class TestRunRepair:
         sg = self._make_subgoal()
         backend, planner, validator = self._make_mocks()
 
-        result = await run_repair(outcome, sg, backend, planner, validator)
+        result = await run_repair(outcome, sg, backend, planner, validator, episodic_memory=self._make_memory())
         assert result is True
         backend.execute_step.assert_called_once()
 
@@ -342,6 +348,6 @@ class TestRunRepair:
         sg = self._make_subgoal()
         backend, planner, validator = self._make_mocks()
 
-        result = await run_repair(outcome, sg, backend, planner, validator)
+        result = await run_repair(outcome, sg, backend, planner, validator, episodic_memory=self._make_memory())
         assert result is False
         assert outcome.failure_class == "auth_required"

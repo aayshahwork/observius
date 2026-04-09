@@ -18,7 +18,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import redis as redis_lib
 from celery import Celery
@@ -254,6 +254,15 @@ def execute_task(self, task_id: str, task_config_json: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _patch_applied_to_json(value: Any) -> Optional[dict]:
+    """Convert patch_applied (str or dict) to JSON-safe dict for the DB."""
+    if not value:
+        return None
+    if isinstance(value, dict):
+        return value
+    return {"strategy": value}
+
+
 def _persist_result(task_id: str, result: Any, config_dict: dict) -> None:
     """Write task result, steps, and account usage to the database."""
     from api.models.account import Account
@@ -305,9 +314,9 @@ def _persist_result(task_id: str, result: Any, config_dict: dict) -> None:
                 success=step.success,
                 error_message=step.error,
                 context=step.context,
-                failure_class=_ctx.get("failure_class"),
-                validator_verdict=_ctx.get("validator_verdict"),
-                patch_applied=_ctx.get("patch_applied"),
+                failure_class=step.failure_class or _ctx.get("failure_class"),
+                validator_verdict=step.validator_verdict or _ctx.get("validator_verdict"),
+                patch_applied=_patch_applied_to_json(step.patch_applied) or _ctx.get("patch_applied"),
                 har_ref=_ctx.get("har_ref"),
                 trace_ref=_ctx.get("trace_ref"),
                 video_ref=_ctx.get("video_ref"),

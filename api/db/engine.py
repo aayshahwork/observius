@@ -8,7 +8,23 @@ from api.config import settings
 # Supabase (and most managed Postgres providers) require SSL for external connections.
 # asyncpg does not enable SSL by default, so we must pass an ssl context explicitly
 # when connecting to a remote host.
-_is_remote = "localhost" not in settings.DATABASE_URL and "127.0.0.1" not in settings.DATABASE_URL
+def _detect_remote(url: str) -> bool:
+    """Return True only for external hosts that require SSL (e.g. Supabase, RDS).
+    Excludes localhost, 127.0.0.1, and bare hostnames like Docker service names (postgres, db).
+    """
+    import re
+    match = re.search(r"@([^:/]+)", url)
+    if not match:
+        return False
+    host = match.group(1)
+    if host in ("localhost", "127.0.0.1"):
+        return False
+    # Bare hostname (no dots) = internal Docker/compose service — no SSL needed
+    if "." not in host:
+        return False
+    return True
+
+_is_remote = _detect_remote(settings.DATABASE_URL)
 if _is_remote:
     _ssl_ctx = ssl.create_default_context()
     _ssl_ctx.check_hostname = False

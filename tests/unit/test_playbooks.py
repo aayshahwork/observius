@@ -1,134 +1,93 @@
-"""Tests for workers.reliability.playbooks — repair playbook coverage and intent generation."""
+"""Tests for workers.reliability.playbooks — repair playbook coverage."""
 
 from __future__ import annotations
 
 import pytest
 
-from workers.shared_types import FailureClass, StepIntent
+from workers.shared_types import FailureClass
 from workers.reliability.playbooks import (
-    REPAIR_PLAYBOOK,
     RepairAction,
-    repair_action_to_intent,
+    RepairStrategy,
+    get_playbook,
 )
 
 
 # ---------------------------------------------------------------------------
-# REPAIR_PLAYBOOK completeness
+# Playbook completeness
 # ---------------------------------------------------------------------------
 
 
 class TestPlaybookCoverage:
-    def test_every_failure_class_has_entry(self) -> None:
-        """Every FailureClass member must have an entry in REPAIR_PLAYBOOK."""
+    def test_every_failure_class_has_playbook(self) -> None:
+        """Every FailureClass member must return a non-empty list from get_playbook."""
         for fc in FailureClass:
-            assert fc in REPAIR_PLAYBOOK, f"Missing REPAIR_PLAYBOOK entry for {fc!r}"
+            playbook = get_playbook(fc)
+            assert isinstance(playbook, list), f"Expected list for {fc!r}, got {type(playbook)}"
+            assert len(playbook) > 0, f"Empty playbook for {fc!r}"
 
-    def test_all_entries_are_lists_of_repair_actions(self) -> None:
-        for fc, actions in REPAIR_PLAYBOOK.items():
-            assert isinstance(actions, list), f"Expected list for {fc!r}, got {type(actions)}"
-            for action in actions:
+    def test_all_entries_are_repair_actions(self) -> None:
+        for fc in FailureClass:
+            for action in get_playbook(fc):
                 assert isinstance(action, RepairAction), (
-                    f"Expected RepairAction in {fc!r} list, got {action!r}"
+                    f"Expected RepairAction in {fc!r} playbook, got {action!r}"
                 )
 
-    def test_no_duplicate_actions_per_class(self) -> None:
-        for fc, actions in REPAIR_PLAYBOOK.items():
-            assert len(actions) == len(set(actions)), (
-                f"Duplicate actions in {fc!r}: {actions}"
-            )
+    def test_all_strategies_are_valid(self) -> None:
+        for fc in FailureClass:
+            for action in get_playbook(fc):
+                assert isinstance(action.strategy, RepairStrategy), (
+                    f"Invalid strategy {action.strategy!r} in {fc!r} playbook"
+                )
 
 
 # ---------------------------------------------------------------------------
-# repair_action_to_intent — basic contracts
+# Specific playbook entries
 # ---------------------------------------------------------------------------
 
 
-class TestRepairActionToIntent:
-    def test_every_action_returns_step_intent(self) -> None:
-        """Every RepairAction must produce a valid StepIntent."""
-        for action in RepairAction:
-            intent = repair_action_to_intent(action)
-            assert isinstance(intent, StepIntent), f"Expected StepIntent for {action!r}"
-            assert isinstance(intent.action, str) and intent.action, (
-                f"StepIntent.action must be a non-empty string for {action!r}"
-            )
-            assert isinstance(intent.target, dict), (
-                f"StepIntent.target must be a dict for {action!r}"
-            )
+class TestSpecificPlaybooks:
+    def test_llm_auth_failed_aborts(self) -> None:
+        """LLM auth failure is unrecoverable — must abort."""
+        actions = get_playbook(FailureClass.LLM_AUTH_FAILED)
+        assert actions[0].strategy == RepairStrategy.ABORT
 
-    def test_scroll_search(self) -> None:
-        intent = repair_action_to_intent(RepairAction.SCROLL_SEARCH)
-        assert intent.action == "scroll"
-        assert intent.target["direction"] == "down"
+    def test_browser_crash_aborts(self) -> None:
+        actions = get_playbook(FailureClass.BROWSER_CRASH)
+        assert actions[0].strategy == RepairStrategy.ABORT
 
-    def test_close_overlay(self) -> None:
-        intent = repair_action_to_intent(RepairAction.CLOSE_OVERLAY)
-        assert intent.action == "click"
-        assert intent.target["role"] == "button"
+    def test_llm_overloaded_waits(self) -> None:
+        actions = get_playbook(FailureClass.LLM_OVERLOADED)
+        assert actions[0].strategy == RepairStrategy.WAIT_AND_RETRY
+        assert actions[0].wait_seconds > 0
 
-    def test_close_modal(self) -> None:
-        intent = repair_action_to_intent(RepairAction.CLOSE_MODAL)
-        assert intent.action == "click"
-        assert intent.target["name"] == "Close"
+    def test_element_missing_scrolls(self) -> None:
+        actions = get_playbook(FailureClass.BROWSER_ELEMENT_MISSING)
+        assert actions[0].strategy == RepairStrategy.SCROLL_AND_RETRY
 
-    def test_dismiss_dialog(self) -> None:
-        intent = repair_action_to_intent(RepairAction.DISMISS_DIALOG)
-        assert intent.action == "key_press"
-        assert intent.value == "Escape"
+    def test_anti_bot_blocked_aborts(self) -> None:
+        actions = get_playbook(FailureClass.ANTI_BOT_BLOCKED)
+        assert actions[0].strategy == RepairStrategy.ABORT
 
-    def test_wait_stability(self) -> None:
-        intent = repair_action_to_intent(RepairAction.WAIT_STABILITY)
-        assert intent.action == "wait"
-        assert intent.value == "2000"
+    def test_unknown_replans(self) -> None:
+        actions = get_playbook(FailureClass.UNKNOWN)
+        assert actions[0].strategy == RepairStrategy.REPLAN
 
-    def test_refresh_page_uses_context_url(self) -> None:
-        intent = repair_action_to_intent(
-            RepairAction.REFRESH_PAGE,
-            context={"current_url": "https://example.com/page"},
-        )
-        assert intent.action == "navigate"
-        assert intent.value == "https://example.com/page"
 
-    def test_refresh_page_without_context(self) -> None:
-        intent = repair_action_to_intent(RepairAction.REFRESH_PAGE)
-        assert intent.action == "navigate"
-        assert intent.value == ""
+# ---------------------------------------------------------------------------
+# RepairAction dataclass
+# ---------------------------------------------------------------------------
 
-    def test_backtrack(self) -> None:
-        intent = repair_action_to_intent(RepairAction.BACKTRACK)
-        assert intent.action == "go_back"
 
-    def test_scroll_into_view_uses_original_target(self) -> None:
-        target = {"strategy": "css", "selector": "#submit-btn"}
-        intent = repair_action_to_intent(
-            RepairAction.SCROLL_INTO_VIEW,
-            context={"original_target": target},
-        )
-        assert intent.action == "scroll"
-        assert intent.target == target
+class TestRepairAction:
+    def test_frozen(self) -> None:
+        action = RepairAction(RepairStrategy.WAIT_AND_RETRY, wait_seconds=5.0)
+        with pytest.raises(AttributeError):
+            action.strategy = RepairStrategy.ABORT  # type: ignore[misc]
 
-    def test_re_auth_uses_login_url(self) -> None:
-        intent = repair_action_to_intent(
-            RepairAction.RE_AUTH,
-            context={"login_url": "https://example.com/login"},
-        )
-        assert intent.action == "navigate"
-        assert intent.value == "https://example.com/login"
-        assert intent.metadata.get("auth_flow") is True
+    def test_description_default(self) -> None:
+        action = RepairAction(RepairStrategy.REPLAN)
+        assert action.description == ""
 
-    def test_escalate_human(self) -> None:
-        intent = repair_action_to_intent(RepairAction.ESCALATE_HUMAN)
-        assert intent.metadata.get("escalate_human") is True
-
-    def test_scroll_into_view_without_context_sets_missing_target_flag(self) -> None:
-        """SCROLL_INTO_VIEW with no context must signal missing target via metadata."""
-        intent = repair_action_to_intent(RepairAction.SCROLL_INTO_VIEW)
-        assert intent.action == "scroll"
-        assert intent.target == {}
-        assert intent.metadata.get("missing_target") is True
-
-    def test_none_context_is_safe(self) -> None:
-        """Passing context=None must not raise."""
-        for action in RepairAction:
-            intent = repair_action_to_intent(action, context=None)
-            assert isinstance(intent, StepIntent)
+    def test_wait_seconds_default(self) -> None:
+        action = RepairAction(RepairStrategy.REPLAN)
+        assert action.wait_seconds == 0.0

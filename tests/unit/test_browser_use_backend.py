@@ -130,7 +130,7 @@ class TestNameAndProtocol:
     def test_execute_step_raises(self):
         backend = BrowserUseBackend()
         with pytest.raises(NotImplementedError, match="delegation mode only"):
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 backend.execute_step(StepIntent())
             )
 
@@ -143,7 +143,7 @@ class TestNameAndProtocol:
 class TestInitialize:
     def test_stores_config(self):
         backend = BrowserUseBackend()
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.run(
             backend.initialize({"model": "claude-haiku-4-5-20251001", "headless": False})
         )
         assert backend._config["model"] == "claude-haiku-4-5-20251001"
@@ -151,17 +151,17 @@ class TestInitialize:
 
     def test_default_model(self):
         backend = BrowserUseBackend()
-        asyncio.get_event_loop().run_until_complete(backend.initialize({}))
+        asyncio.run(backend.initialize({}))
         assert backend._model == "claude-sonnet-4-6"
 
     def test_creates_llm(self):
         backend = BrowserUseBackend()
-        asyncio.get_event_loop().run_until_complete(backend.initialize({}))
+        asyncio.run(backend.initialize({}))
         assert backend._llm is not None
 
     def test_creates_browser_session(self):
         backend = BrowserUseBackend()
-        asyncio.get_event_loop().run_until_complete(backend.initialize({}))
+        asyncio.run(backend.initialize({}))
         assert backend._browser_session is not None
 
 
@@ -174,15 +174,15 @@ class TestTeardown:
     def test_teardown_without_initialize(self):
         """Teardown on fresh instance should not raise."""
         backend = BrowserUseBackend()
-        asyncio.get_event_loop().run_until_complete(backend.teardown())
+        asyncio.run(backend.teardown())
         assert backend._browser_session is None
         assert backend._llm is None
 
     def test_teardown_clears_state(self):
         backend = BrowserUseBackend()
-        asyncio.get_event_loop().run_until_complete(backend.initialize({}))
+        asyncio.run(backend.initialize({}))
         assert backend._llm is not None
-        asyncio.get_event_loop().run_until_complete(backend.teardown())
+        asyncio.run(backend.teardown())
         assert backend._llm is None
         assert backend._browser_session is None
         assert backend._last_history is None
@@ -192,7 +192,7 @@ class TestTeardown:
         mock_session = MagicMock()
         mock_session.close = MagicMock(return_value=None)
         backend._browser_session = mock_session
-        asyncio.get_event_loop().run_until_complete(backend.teardown())
+        asyncio.run(backend.teardown())
         mock_session.close.assert_called_once()
 
     def test_teardown_handles_async_close(self):
@@ -200,7 +200,7 @@ class TestTeardown:
         mock_session = MagicMock()
         mock_session.close = AsyncMock(return_value=None)
         backend._browser_session = mock_session
-        asyncio.get_event_loop().run_until_complete(backend.teardown())
+        asyncio.run(backend.teardown())
         mock_session.close.assert_awaited_once()
 
     def test_teardown_handles_close_exception(self):
@@ -209,7 +209,7 @@ class TestTeardown:
         mock_session.close = MagicMock(side_effect=RuntimeError("boom"))
         backend._browser_session = mock_session
         # Should not raise
-        asyncio.get_event_loop().run_until_complete(backend.teardown())
+        asyncio.run(backend.teardown())
         assert backend._browser_session is None
 
 
@@ -222,7 +222,7 @@ class TestExecuteGoalGuard:
     def test_raises_without_initialize(self):
         backend = BrowserUseBackend()
         with pytest.raises(RuntimeError, match="not initialized"):
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 backend.execute_goal("test goal")
             )
 
@@ -462,7 +462,7 @@ class TestOnStepEnd:
         agent = MagicMock()
         agent.history = [MagicMock()]
 
-        asyncio.get_event_loop().run_until_complete(backend._on_step_end(agent))
+        asyncio.run(backend._on_step_end(agent))
         backend._stuck_detector.check_agent_step.assert_called_once()
 
     def test_stops_agent_when_stuck(self):
@@ -478,7 +478,7 @@ class TestOnStepEnd:
         agent.history = [MagicMock()]
         agent.stop = MagicMock()
 
-        asyncio.get_event_loop().run_until_complete(backend._on_step_end(agent))
+        asyncio.run(backend._on_step_end(agent))
         agent.stop.assert_called_once()
 
     def test_handles_no_history(self):
@@ -486,13 +486,13 @@ class TestOnStepEnd:
         agent = MagicMock()
         agent.history = None
         # Should not raise
-        asyncio.get_event_loop().run_until_complete(backend._on_step_end(agent))
+        asyncio.run(backend._on_step_end(agent))
 
     def test_handles_empty_history(self):
         backend = BrowserUseBackend()
         agent = MagicMock()
         agent.history = []
-        asyncio.get_event_loop().run_until_complete(backend._on_step_end(agent))
+        asyncio.run(backend._on_step_end(agent))
 
     def test_handles_exception(self):
         backend = BrowserUseBackend()
@@ -502,7 +502,7 @@ class TestOnStepEnd:
         agent = MagicMock()
         agent.history = [MagicMock()]
         # Should not raise
-        asyncio.get_event_loop().run_until_complete(backend._on_step_end(agent))
+        asyncio.run(backend._on_step_end(agent))
 
 
 # ---------------------------------------------------------------------------
@@ -513,7 +513,7 @@ class TestOnStepEnd:
 class TestGetObservation:
     def test_returns_empty_without_state(self):
         backend = BrowserUseBackend()
-        obs = asyncio.get_event_loop().run_until_complete(backend.get_observation())
+        obs = asyncio.run(backend.get_observation())
         assert isinstance(obs, Observation)
         assert obs.url == ""
         assert obs.has_screenshot is False
@@ -524,7 +524,7 @@ class TestGetObservation:
             screenshots=["abc123"],
             urls=["https://example.com/result"],
         )
-        obs = asyncio.get_event_loop().run_until_complete(backend.get_observation())
+        obs = asyncio.run(backend.get_observation())
         assert obs.url == "https://example.com/result"
         assert obs.screenshot_b64 == "abc123"
 
@@ -534,7 +534,7 @@ class TestGetObservation:
             screenshots=[b"\x89PNG"],
             urls=["https://example.com"],
         )
-        obs = asyncio.get_event_loop().run_until_complete(backend.get_observation())
+        obs = asyncio.run(backend.get_observation())
         assert obs.screenshot_b64 is not None
         assert isinstance(obs.screenshot_b64, str)
 
@@ -552,7 +552,7 @@ class TestGetObservation:
         mock_session.current_page = mock_page
         backend._browser_session = mock_session
 
-        obs = asyncio.get_event_loop().run_until_complete(backend.get_observation())
+        obs = asyncio.run(backend.get_observation())
         assert obs.url == "https://example.com/fallback"
         assert obs.page_title == "Fallback Title"
         assert obs.viewport_width == 1920
