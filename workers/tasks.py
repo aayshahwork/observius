@@ -6,7 +6,7 @@ Two tasks:
 - deliver_webhook: Delivers webhook notifications with HMAC-SHA256 signing.
 
 Start the worker:
-    celery -A workers.main worker --loglevel=info --pool=prefork --concurrency=2
+    celery -A workers.main worker --loglevel=info --pool=prefork --concurrency=1
 """
 
 from __future__ import annotations

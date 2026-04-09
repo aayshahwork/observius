@@ -2,7 +2,7 @@
 workers/main.py — Celery application entrypoint.
 
 Start the worker:
-    celery -A workers.main worker --loglevel=info --pool=prefork --concurrency=2
+    celery -A workers.main worker --loglevel=info --pool=prefork --concurrency=1
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ celery_app.conf.update(
     },
     # Worker config: prefork pool with 2 workers per container
     worker_pool="prefork",
-    worker_concurrency=2,
+    worker_concurrency=1,
 )
 
 # ---------------------------------------------------------------------------
