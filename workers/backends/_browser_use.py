@@ -80,6 +80,7 @@ class BrowserUseBackend:
         api_key = config.get("anthropic_api_key", worker_settings.ANTHROPIC_API_KEY)
 
         # -- LLM setup (exact match to executor.py lines 429-435) --
+        from anthropic import AsyncAnthropic
         from browser_use.llm.anthropic.chat import ChatAnthropic
 
         self._llm = ChatAnthropic(
@@ -87,6 +88,18 @@ class BrowserUseBackend:
             api_key=api_key,
             timeout=60,
         )
+
+        # CRITICAL FIX: browser-use 0.11.x creates a new AsyncAnthropic
+        # client on every LLM call (get_client() returns a fresh instance).
+        # This prevents TCP connection reuse / pooling, causing Anthropic's
+        # load balancer to treat every request as a new client and return
+        # 529 (overloaded) under even moderate load.
+        # Fix: cache a single client and monkey-patch get_client().
+        _cached_client = AsyncAnthropic(
+            api_key=api_key, timeout=60, max_retries=3,
+        )
+        self._llm.get_client = lambda: _cached_client
+        self._cached_anthropic_client = _cached_client  # prevent GC
 
         # -- BrowserSession setup (exact match to executor.py lines 441-449) --
         from browser_use.browser.session import BrowserSession
@@ -114,6 +127,7 @@ class BrowserUseBackend:
                 logger.debug("BrowserSession close failed: %s", exc)
             self._browser_session = None
         self._llm = None
+        self._cached_anthropic_client = None
         self._last_history = None
 
     # ------------------------------------------------------------------
