@@ -77,8 +77,13 @@ async def run_pav_loop(
         # -- Get initial observation --
         initial_obs = await backend.get_observation()
 
-        # -- Create plan --
-        plan = await planner.create_plan(task_config.task, initial_obs)
+        # -- Create plan (include URL so planner generates URL-aware subgoals) --
+        goal_with_url = (
+            f"Start URL: {task_config.url}\nTask: {task_config.task}"
+            if task_config.url
+            else task_config.task
+        )
+        plan = await planner.create_plan(goal_with_url, initial_obs)
 
         # Fallback: if planner returned no subgoals, create a single
         # delegation subgoal for the entire task.

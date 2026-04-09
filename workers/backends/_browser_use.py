@@ -144,6 +144,23 @@ class BrowserUseBackend:
         self._step_timestamps = []
         self._last_history = None
 
+        # -- Navigate to start URL if browser is on about:blank --
+        start_url = (self._config or {}).get("url")
+        if start_url:
+            page = self._get_current_page()
+            if page is not None:
+                current_url = getattr(page, "url", "") or ""
+                if not current_url or current_url == "about:blank":
+                    try:
+                        await page.goto(
+                            start_url,
+                            wait_until="domcontentloaded",
+                            timeout=30000,
+                        )
+                        logger.info("Pre-navigated to %s", start_url)
+                    except Exception as exc:
+                        logger.warning("Pre-navigation to %s failed: %s", start_url, exc)
+
         # -- Agent construction (exact match to executor.py lines 451-458) --
         from browser_use import Agent
 
