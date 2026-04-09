@@ -4,7 +4,7 @@ workers/reliability/repair_loop.py — Self-healing repair loop.
 Classifies the failure, checks the circuit breaker, executes a repair
 playbook action, and returns whether the subgoal should be re-attempted.
 
-Optionally integrates with episodic memory to prioritize known-good fixes.
+Integrates with episodic memory to prioritize known-good fixes and record outcomes.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
+from workers.memory.episodic import EpisodicMemory
 from workers.reliability.circuit_breaker import CircuitBreaker
 from workers.reliability.detectors import classify_outcome
 from workers.reliability.playbooks import RepairAction, RepairStrategy, get_playbook
@@ -20,7 +21,6 @@ from workers.shared_types import ValidatorOutcome
 
 if TYPE_CHECKING:
     from workers.backends.protocol import CUABackend
-    from workers.memory.episodic import EpisodicMemory
     from workers.pav.planner import Planner
     from workers.pav.types import SubGoal
     from workers.pav.validator import Validator
@@ -36,7 +36,8 @@ async def run_repair(
     validator: "Validator",
     *,
     circuit_breaker: CircuitBreaker | None = None,
-    episodic_memory: "EpisodicMemory | None" = None,
+    episodic_memory: EpisodicMemory,
+    domain: str = "",
 ) -> bool:
     """Attempt to repair a failed subgoal outcome.
 
@@ -68,25 +69,23 @@ async def run_repair(
         )
         return False
 
-    # -- Get playbook (optionally prioritised by episodic memory) --
+    # -- Get playbook prioritised by episodic memory --
     playbook = list(get_playbook(fc))
 
-    if episodic_memory is not None:
-        try:
-            known = await episodic_memory.get_known_fixes(fc.value)
-            known_strategies: list[RepairAction] = []
-            for fix in known:
-                try:
-                    strategy = RepairStrategy(fix["repair_strategy"])
-                    known_strategies.append(RepairAction(strategy, description=f"memory: {fix.get('description', '')}"))
-                except (ValueError, KeyError):
-                    pass
-            if known_strategies:
-                # Prepend memory-backed actions; keep remaining playbook actions deduplicated
-                seen_strategies = {a.strategy for a in known_strategies}
-                playbook = known_strategies + [a for a in playbook if a.strategy not in seen_strategies]
-        except Exception:
-            logger.warning("repair_loop: episodic memory unavailable; skipping known-fix lookup")
+    try:
+        known = await episodic_memory.get_known_fixes(fc.value, domain)
+        known_strategies: list[RepairAction] = []
+        for fix in known:
+            try:
+                strategy = RepairStrategy(fix["repair_strategy"])
+                known_strategies.append(RepairAction(strategy, description=f"memory: {fix.get('description', '')}"))
+            except (ValueError, KeyError):
+                pass
+        if known_strategies:
+            seen_strategies = {a.strategy for a in known_strategies}
+            playbook = known_strategies + [a for a in playbook if a.strategy not in seen_strategies]
+    except Exception:
+        logger.warning("repair_loop: episodic memory query failed; using static playbook")
 
     if not playbook:
         return False
@@ -107,6 +106,17 @@ async def run_repair(
         else:
             circuit_breaker.record_failure(group)
 
+    # -- Record outcome in episodic memory --
+    try:
+        await episodic_memory.record_failure_fix(
+            fc.value,
+            action.strategy.value,
+            success=success,
+            domain=domain,
+        )
+    except Exception:
+        logger.warning("repair_loop: episodic memory write failed")
+
     if success:
         outcome.patch_applied = action.strategy.value
         logger.info(
@@ -114,17 +124,6 @@ async def run_repair(
             action.strategy.value,
             fc.value,
         )
-
-        # Record fix in episodic memory
-        if episodic_memory is not None:
-            try:
-                await episodic_memory.record_failure_fix(
-                    fc.value,
-                    action.strategy.value,
-                    success=True,
-                )
-            except Exception:
-                pass
 
     return success
 

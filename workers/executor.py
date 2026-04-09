@@ -227,6 +227,8 @@ class TaskExecutor:
 
         try:
             from workers.backends.registry import backend_for_task
+            from workers.memory.episodic import EpisodicMemory
+            from workers.memory.store import MemoryStore
             from workers.pav.loop import run_pav_loop
             from workers.pav.planner import Planner
             from workers.pav.validator import Validator
@@ -244,10 +246,21 @@ class TaskExecutor:
                 max_seconds=float(self.config.timeout_seconds or 0),
             )
 
+            memory_store = MemoryStore(worker_settings.DATABASE_URL)
+            await memory_store.init()
+            episodic_memory = EpisodicMemory(
+                store=memory_store,
+                run_id=str(task_id),
+                tenant_id=str(self.account_id or ""),
+            )
+            task_domain = urlparse(self.config.url).netloc if self.config.url else ""
+
             async def repair_fn(outcome, subgoal, be, pl, va):
                 return await run_repair(
                     outcome, subgoal, be, pl, va,
                     circuit_breaker=circuit_breaker,
+                    episodic_memory=episodic_memory,
+                    domain=task_domain,
                 )
 
             return await run_pav_loop(
