@@ -11,6 +11,7 @@ Two execution modes per subgoal:
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 import time
@@ -109,6 +110,13 @@ async def run_pav_loop(
 
             subgoal.status = "active"
             subgoal.attempts += 1
+
+            # Rate-limit guard: space out API calls to avoid 429s.
+            # Each iteration fires 2-3 LLM calls (planner + backend +
+            # validator) in rapid succession; without a pause between
+            # iterations the next burst arrives before the rate window
+            # resets, triggering retries that waste 15-30s each.
+            await asyncio.sleep(1.0)
 
             outcome = await _execute_subgoal(
                 subgoal=subgoal,
