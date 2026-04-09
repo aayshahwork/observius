@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 _TASK_STORE = Path(".pokant") / "tasks"
 
 # Hosted cloud API base URL.
-_CLOUD_API_BASE = "https://api.pokant.dev/v1"
+_CLOUD_API_BASE = "https://pokant-production.up.railway.app/api/v1"
 
 # Seconds between cloud-task status polls.
 _POLL_INTERVAL: float = 2.0
@@ -112,6 +112,13 @@ class ComputerUse:
             )
 
         _TASK_STORE.mkdir(parents=True, exist_ok=True)
+
+    @property
+    def _cloud_base(self) -> str:
+        """Cloud API base URL, preferring user-provided pokant_api_url."""
+        if self.pokant_api_url:
+            return self.pokant_api_url.rstrip("/") + "/api/v1"
+        return _CLOUD_API_BASE
 
     # ------------------------------------------------------------------
     # Public synchronous API
@@ -374,7 +381,7 @@ class ComputerUse:
             payload["webhook_url"] = config.webhook_url
 
         async with httpx.AsyncClient(timeout=30) as client:
-            submit = await client.post(f"{_CLOUD_API_BASE}/tasks", headers=headers, json=payload)
+            submit = await client.post(f"{self._cloud_base}/tasks", headers=headers, json=payload)
             _raise_for_status(submit)
             task_id: str = submit.json()["task_id"]
             logger.info("Cloud task submitted: %s", task_id)
@@ -385,7 +392,7 @@ class ComputerUse:
             while time.monotonic() < deadline:
                 await asyncio.sleep(_POLL_INTERVAL)
                 try:
-                    poll = await client.get(f"{_CLOUD_API_BASE}/tasks/{task_id}", headers=headers)
+                    poll = await client.get(f"{self._cloud_base}/tasks/{task_id}", headers=headers)
                     _raise_for_status(poll)
                     poll_errors = 0  # reset on success
                     poll_data: Dict[str, Any] = poll.json()
@@ -425,7 +432,7 @@ class ComputerUse:
         """
         headers = {"Authorization": f"Bearer {self.api_key}"}
         async with httpx.AsyncClient(timeout=15) as client:
-            response = await client.get(f"{_CLOUD_API_BASE}/tasks/{task_id}", headers=headers)
+            response = await client.get(f"{self._cloud_base}/tasks/{task_id}", headers=headers)
         if response.status_code == 404:
             raise KeyError(f"Cloud task {task_id!r} not found")
         _raise_for_status(response)
@@ -443,7 +450,7 @@ class ComputerUse:
             params["status"] = status
         async with httpx.AsyncClient(timeout=15) as client:
             response = await client.get(
-                f"{_CLOUD_API_BASE}/tasks",
+                f"{self._cloud_base}/tasks",
                 headers=headers,
                 params=params,
             )
@@ -462,7 +469,7 @@ class ComputerUse:
         try:
             async with httpx.AsyncClient(timeout=15) as client:
                 response = await client.get(
-                    f"{_CLOUD_API_BASE}/tasks/{task_id}/replay",
+                    f"{self._cloud_base}/tasks/{task_id}/replay",
                     headers=headers,
                 )
         except (httpx.NetworkError, httpx.TimeoutException) as exc:
