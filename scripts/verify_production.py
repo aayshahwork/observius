@@ -159,7 +159,7 @@ class ProductionVerifier:
 
         email = f"verify-{uuid.uuid4().hex[:8]}@test.pokant.dev"
         status, body = http(
-            f"{self.base}/api/v1/auth/register",
+            f"{self.base}/auth/register",
             method="POST",
             body={"email": email, "name": "Deploy Verifier"},
         )

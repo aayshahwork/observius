@@ -3,7 +3,7 @@
 scripts/test_usage_enforcement.py — Full end-to-end billing enforcement test.
 
 Flow:
-  1. Register a new account via POST /api/v1/auth/register
+  1. Register a new account via POST /auth/register
   2. Use the returned API key to submit a task
   3. Check that monthly_steps_used can be incremented in the database
   4. Set monthly_steps_used to 499
@@ -108,7 +108,7 @@ def main() -> None:
     section("1. Register new account")
     # ------------------------------------------------------------------
     email = f"enforcement_{uuid.uuid4().hex[:8]}@test.dev"
-    resp = client.post("/api/v1/auth/register", json={"email": email})
+    resp = client.post("/auth/register", json={"email": email})
     assert resp.status_code == 201, f"Registration failed: {resp.text}"
     reg = resp.json()
     api_key = reg["api_key"]

@@ -114,7 +114,7 @@ def main() -> None:
     # ------------------------------------------------------------------
     section("1. Register fresh account")
     email = f"billing_test_{uuid.uuid4().hex[:8]}@test.dev"
-    resp = client.post("/api/v1/auth/register", json={"email": email})
+    resp = client.post("/auth/register", json={"email": email})
     if resp.status_code != 201:
         fail("Registration failed", resp.text[:200])
         sys.exit(1)

@@ -78,11 +78,23 @@ async def run_pav_loop(
         # -- Get initial observation --
         initial_obs = await backend.get_observation()
 
-        # -- Create plan (include URL so planner generates URL-aware subgoals) --
+        # -- Create plan (include URL so planner generates URL-aware subgoals).
+        # When an output_schema is provided, inject a JSON-return directive so
+        # the delegated agent emits structured data (browser-use honors it).
+        schema_directive = ""
+        if getattr(task_config, "output_schema", None):
+            import json as _json
+            schema_directive = (
+                "\n\nIMPORTANT: Return the final result as a SINGLE JSON object "
+                "matching this exact schema (no markdown, no prose outside the "
+                f"JSON):\n{_json.dumps(task_config.output_schema, indent=2)}"
+            )
+
+        goal_text = task_config.task + schema_directive
         goal_with_url = (
-            f"Start URL: {task_config.url}\nTask: {task_config.task}"
+            f"Start URL: {task_config.url}\nTask: {goal_text}"
             if task_config.url
-            else task_config.task
+            else goal_text
         )
         plan = await planner.create_plan(goal_with_url, initial_obs)
 
@@ -91,7 +103,7 @@ async def run_pav_loop(
         if not plan.subgoals:
             plan.subgoals.append(SubGoal(
                 id="sg_1",
-                description=task_config.task,
+                description=goal_text,
                 success_criteria="Task completed successfully",
                 delegation_mode=True,
             ))
@@ -251,12 +263,38 @@ async def _execute_delegated(
     on_step: Optional[Callable[[StepResult], None]],
 ) -> ValidatorOutcome:
     """Delegate an entire subgoal to the backend's agentic loop."""
+    # -- Live streaming --
+    # Long-running delegations (browser-use Agent.run) are opaque: if the
+    # worker hits Celery's soft_time_limit mid-run, the outer exception
+    # handler sees zero steps. Wire a streaming callback so we accumulate
+    # partial StepResults as the Agent emits them, and dedupe them against
+    # the final return list below.
+    streamed: list[int] = [0]  # boxed so inner closure can mutate
+
+    def _stream(sr: StepResult) -> None:
+        all_step_results.append(sr)
+        budget.record_step(cost_cents=sr.cost_cents)
+        streamed[0] += 1
+        if on_step:
+            try:
+                on_step(sr)
+            except Exception as exc:
+                logger.debug("PAV streaming on_step failed: %s", exc)
+
+    prev_stream_cb = getattr(backend, "_live_step_callback", None)
+    try:
+        setattr(backend, "_live_step_callback", _stream)
+    except Exception:
+        pass
+
     try:
         step_results = await backend.execute_goal(
             subgoal.description,
             max_steps=budget.remaining_steps,
         )
     except Exception as exc:
+        # Streamed steps are already in all_step_results. Just append one
+        # terminal error marker so the validator sees a failure.
         error_result = StepResult(success=False, error=str(exc))
         all_step_results.append(error_result)
         budget.record_step()
@@ -268,9 +306,34 @@ async def _execute_delegated(
             message=f"Backend delegation failed: {exc}",
             is_critical=True,
         )
+    finally:
+        try:
+            setattr(backend, "_live_step_callback", prev_stream_cb)
+        except Exception:
+            pass
 
-    # Record all steps from delegation
-    for sr in step_results:
+    # Reconcile streamed vs returned results.
+    #
+    # (a) Replace the streamed tail of all_step_results with the canonical
+    #     step_results[:streamed_count]. This matters because browser-use
+    #     only populates `history.usage` (aggregate tokens) when the full
+    #     history is retrieved at end-of-run. Partial histories observed
+    #     during on_step_end streaming have tokens_in=0, tokens_out=0.
+    #     The canonical list has aggregate tokens attributed to the last
+    #     step, so the task-level total ends up correct.
+    #
+    # (b) Append any remaining trailing step_results the callback didn't
+    #     observe (e.g. the final `done` step emitted after the last
+    #     on_step_end hook). This prevents both double-counting and
+    #     under-counting.
+    streamed_count = streamed[0]
+    if streamed_count and step_results:
+        canonical_head = step_results[:streamed_count]
+        del all_step_results[-streamed_count:]
+        all_step_results.extend(canonical_head)
+
+    trailing = step_results[streamed_count:]
+    for sr in trailing:
         budget.record_step(cost_cents=sr.cost_cents)
         all_step_results.append(sr)
         if on_step:
@@ -350,6 +413,7 @@ def _build_backend_config(config: TaskConfig) -> dict:
         "task": config.task,
         "executor_mode": config.executor_mode,
         "use_vision": getattr(config, "use_vision", True),
+        "output_schema": getattr(config, "output_schema", None),
     }
 
 
@@ -366,11 +430,19 @@ def _build_task_result(
         sg.status == "failed" for sg in plan.subgoals
     )
 
-    # Extract final result data from the last step's side effects
+    # Extract final result data from the last step's side effects and
+    # coerce it against the task's output_schema when one is provided.
     result_data = _extract_result_data(step_results)
+    if result_data is not None and getattr(config, "output_schema", None):
+        result_data = _coerce_to_schema(result_data, config.output_schema)
 
     duration_ms = int((time.monotonic() - start_time) * 1000)
 
+    # Derive cost directly from step_results tokens via StepResult.cost_cents
+    # property. budget.spent_cents can be stale when streaming attributes
+    # zero tokens during partial-history conversion — we fix that for
+    # all_step_results in _execute_delegated but budget isn't retroactively
+    # updated. Summing the property keeps cost consistent with tokens.
     return TaskResult(
         task_id=task_id,
         status="completed" if success else "failed",
@@ -379,7 +451,7 @@ def _build_task_result(
         error=_collect_errors(plan) if not success else None,
         steps=len(step_results),
         duration_ms=duration_ms,
-        cost_cents=budget.spent_cents,
+        cost_cents=sum(sr.cost_cents for sr in step_results),
         total_tokens_in=sum(sr.tokens_in for sr in step_results),
         total_tokens_out=sum(sr.tokens_out for sr in step_results),
         step_data=_convert_step_results(step_results),
@@ -387,18 +459,64 @@ def _build_task_result(
 
 
 def _extract_result_data(step_results: List[StepResult]) -> Optional[dict]:
-    """Try to extract structured result data from step side effects."""
+    """Try to extract structured result data from step side effects.
+
+    Accepts either a JSON object or a string with JSON embedded in it
+    (e.g. ```json ... ``` code block). Falls back to ``{"raw": str}``.
+    """
     import json
+    import re
 
     for sr in reversed(step_results):
         for se in sr.side_effects:
-            if se.startswith("final_result:"):
-                raw = se[len("final_result:"):]
+            if not se.startswith("final_result:"):
+                continue
+            raw = se[len("final_result:"):]
+
+            # 1) Straight JSON parse
+            try:
+                parsed = json.loads(raw)
+                if isinstance(parsed, dict):
+                    return parsed
+                return {"value": parsed}
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+            # 2) JSON embedded in a fenced code block
+            m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw, re.DOTALL)
+            if m:
                 try:
-                    return json.loads(raw)
+                    return json.loads(m.group(1))
                 except (json.JSONDecodeError, ValueError):
-                    return {"raw": raw}
+                    pass
+
+            # 3) Bare JSON object anywhere in the string
+            m = re.search(r"(\{[\s\S]*\})", raw)
+            if m:
+                try:
+                    return json.loads(m.group(1))
+                except (json.JSONDecodeError, ValueError):
+                    pass
+
+            # 4) Fallback — preserve the raw text
+            return {"raw": raw}
     return None
+
+
+def _coerce_to_schema(data: dict, schema: dict) -> dict:
+    """Best-effort coercion of extracted data into ``schema`` shape.
+
+    Uses :class:`workers.output_validator.OutputValidator` which handles
+    type coercion (``list[str]``, ``int``, etc.) and raises on hard
+    mismatches. On failure, returns the original data unchanged so
+    users still see *something* in the dashboard.
+    """
+    try:
+        from workers.output_validator import OutputValidator
+        return OutputValidator().validate(data, schema)
+    except Exception as exc:
+        logger.debug("schema coercion failed: %s", exc)
+        return data
 
 
 def _collect_errors(plan: PlanState) -> str:

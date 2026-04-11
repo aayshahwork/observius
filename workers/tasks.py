@@ -155,6 +155,13 @@ def execute_task(self, task_id: str, task_config_json: str) -> None:
 
         from anthropic import Anthropic
 
+        if not worker_settings.ANTHROPIC_API_KEY:
+            raise RuntimeError(
+                "ANTHROPIC_API_KEY is not set. "
+                "Set it in your shell (export ANTHROPIC_API_KEY=sk-ant-...) or in a .env file "
+                "and restart the worker (docker compose restart worker)."
+            )
+
         llm_client = Anthropic(api_key=worker_settings.ANTHROPIC_API_KEY)
         browser_manager = BrowserManager(
             browserbase_api_key=worker_settings.BROWSERBASE_API_KEY or None,
@@ -222,7 +229,7 @@ def execute_task(self, task_id: str, task_config_json: str) -> None:
 
     except Exception as exc:
         logger.exception("Task %s failed with exception", task_id)
-        _persist_failure(task_id, str(exc), config_dict)
+        _persist_failure(task_id, str(exc), config_dict, step_data=shared_steps)
         # Classify error and attempt auto-retry
         try:
             from workers.error_classifier import classify_error
@@ -352,10 +359,26 @@ def _persist_result(task_id: str, result: Any, config_dict: dict) -> None:
         session.close()
 
 
-def _persist_failure(task_id: str, error: str, config_dict: dict) -> None:
-    """Write a failed terminal state to the database."""
+def _persist_failure(
+    task_id: str,
+    error: str,
+    config_dict: dict,
+    step_data: list | None = None,
+) -> None:
+    """Write a failed terminal state to the database.
+
+    When ``step_data`` is provided (e.g. on Celery ``SoftTimeLimitExceeded``),
+    persist any accumulated steps + derived metrics (duration, tokens, cost,
+    screenshots) so the user can still see diagnostic context in the
+    dashboard instead of an empty ``steps=0 dur=0`` row.
+    """
+    from api.models.account import Account
     from api.models.task import Task
+    from api.models.task_step import TaskStep
     from workers.db import get_sync_session
+
+    step_data = step_data or []
+    completed_at = datetime.now(timezone.utc)
 
     session = get_sync_session()
     try:
@@ -366,7 +389,80 @@ def _persist_failure(task_id: str, error: str, config_dict: dict) -> None:
         task.status = "failed"
         task.success = False
         task.error_message = error[:2000]
-        task.completed_at = datetime.now(timezone.utc)
+        task.completed_at = completed_at
+
+        if step_data:
+            task.total_steps = len(step_data)
+
+            # Compute duration from task.started_at if present, otherwise
+            # fall back to summing per-step durations.
+            if task.started_at is not None:
+                task.duration_ms = int(
+                    (completed_at - task.started_at).total_seconds() * 1000
+                )
+            else:
+                task.duration_ms = sum(
+                    int(getattr(s, "duration_ms", 0) or 0) for s in step_data
+                )
+
+            # Token + cost aggregation (best effort, may be zero)
+            task.total_tokens_in = sum(
+                int(getattr(s, "tokens_in", 0) or 0) for s in step_data
+            )
+            task.total_tokens_out = sum(
+                int(getattr(s, "tokens_out", 0) or 0) for s in step_data
+            )
+
+            cost = 0.0
+            for s in step_data:
+                c = getattr(s, "cost_cents", 0) or 0
+                try:
+                    cost += float(c)
+                except (TypeError, ValueError):
+                    pass
+            task.cost_cents = Decimal(str(cost))
+
+            # Persist screenshots (best effort — don't let upload failure
+            # block the failure state from being written)
+            try:
+                screenshot_keys = _upload_step_screenshots(task_id, step_data)
+            except Exception as exc:
+                logger.warning(
+                    "Screenshot persistence failed for failed task %s: %s",
+                    task_id, exc,
+                )
+                screenshot_keys = {}
+
+            for step in step_data:
+                _ctx = getattr(step, "context", None) or {}
+                task_step = TaskStep(
+                    task_id=uuid.UUID(task_id),
+                    step_number=step.step_number,
+                    action_type=str(step.action_type),
+                    description=(step.description[:500] if step.description else None),
+                    screenshot_s3_key=screenshot_keys.get(step.step_number),
+                    llm_tokens_in=getattr(step, "tokens_in", 0) or 0,
+                    llm_tokens_out=getattr(step, "tokens_out", 0) or 0,
+                    duration_ms=getattr(step, "duration_ms", 0) or 0,
+                    success=getattr(step, "success", False),
+                    error_message=getattr(step, "error", None),
+                    context=getattr(step, "context", None),
+                    failure_class=getattr(step, "failure_class", None) or _ctx.get("failure_class"),
+                    validator_verdict=getattr(step, "validator_verdict", None) or _ctx.get("validator_verdict"),
+                    patch_applied=_patch_applied_to_json(
+                        getattr(step, "patch_applied", None)
+                    ) or _ctx.get("patch_applied"),
+                    har_ref=_ctx.get("har_ref"),
+                    trace_ref=_ctx.get("trace_ref"),
+                    video_ref=_ctx.get("video_ref"),
+                )
+                session.add(task_step)
+
+            # Meter usage even for failed-with-progress tasks
+            account = session.get(Account, task.account_id)
+            if account:
+                account.monthly_steps_used += len(step_data)
+
         session.commit()
 
         webhook_url = config_dict.get("webhook_url") or task.webhook_url

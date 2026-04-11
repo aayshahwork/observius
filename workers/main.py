@@ -32,6 +32,7 @@ celery_app.conf.update(
     task_queues=[
         Queue("tasks:free", routing_key="free"),
         Queue("tasks:startup", routing_key="startup"),
+        Queue("tasks:growth", routing_key="growth"),
         Queue("tasks:enterprise", routing_key="enterprise"),
     ],
     task_default_queue="tasks:free",

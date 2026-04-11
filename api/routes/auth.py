@@ -1,8 +1,8 @@
 """
 api/routes/auth.py — Registration and login endpoints.
 
-POST /api/v1/auth/register   Create account with email + password
-POST /api/v1/auth/login      Authenticate and return a fresh API key
+POST /auth/register   Create account with email + password
+POST /auth/login      Authenticate and return a fresh API key
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from shared.constants import TIER_STEP_LIMITS
 
 logger = structlog.get_logger("api.auth")
 
-router = APIRouter(prefix="/api/v1/auth", tags=["Auth"])
+router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
 # ---------------------------------------------------------------------------
@@ -101,7 +101,7 @@ class LoginResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# POST /api/v1/auth/register
+# POST /auth/register
 # ---------------------------------------------------------------------------
 
 @router.post(
@@ -162,7 +162,7 @@ async def register(
 
 
 # ---------------------------------------------------------------------------
-# POST /api/v1/auth/login
+# POST /auth/login
 # ---------------------------------------------------------------------------
 
 @router.post(

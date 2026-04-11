@@ -56,6 +56,11 @@ class BrowserUseBackend:
         self._step_timestamps: List[float] = []
         self._model: str = "claude-sonnet-4-6"
         self._last_history: Any = None  # raw AgentHistoryList for get_observation
+        # Live-streaming: if set, emitted after each completed browser-use
+        # step so PAV can surface partial progress during delegated goals.
+        self._live_step_callback: Optional[Any] = None
+        self._emitted_step_count: int = 0
+        self._current_agent: Any = None
 
     @property
     def name(self) -> str:
@@ -185,14 +190,33 @@ class BrowserUseBackend:
         # -- Agent construction (exact match to executor.py lines 451-458) --
         from browser_use import Agent
 
-        agent = Agent(
-            task=goal,
-            llm=self._llm,
-            browser=self._browser_session,
-            register_new_step_callback=self._on_agent_step,
-            calculate_cost=True,
-            use_vision=self._config.get("use_vision", True),
-        )
+        agent_kwargs: dict[str, Any] = {
+            "task": goal,
+            "llm": self._llm,
+            "browser": self._browser_session,
+            "register_new_step_callback": self._on_agent_step,
+            "calculate_cost": True,
+            "use_vision": self._config.get("use_vision", True),
+        }
+
+        # -- Structured output: convert user's output_schema dict to a
+        # dynamic pydantic model and hand it to browser-use. When set,
+        # browser-use forces the Agent's final `done` action to return
+        # a JSON payload conforming to the schema.
+        output_schema = (self._config or {}).get("output_schema")
+        if output_schema:
+            try:
+                model_cls = _schema_dict_to_pydantic_model(output_schema)
+                agent_kwargs["output_model_schema"] = model_cls
+            except Exception as exc:
+                logger.warning(
+                    "Failed to build output_model_schema from %r: %s",
+                    output_schema, exc,
+                )
+
+        agent = Agent(**agent_kwargs)
+        self._current_agent = agent
+        self._emitted_step_count = 0
 
         # -- Run agent (exact match to executor.py lines 460-468) --
         try:
@@ -202,7 +226,17 @@ class BrowserUseBackend:
                 run_kwargs["on_step_end"] = self._on_step_end
             history = await agent.run(**run_kwargs)
         except Exception as exc:
+            # Preserve whatever partial history the agent accumulated
+            # before the failure so PAV / tasks.py can still persist it.
+            try:
+                partial = getattr(agent, "history", None)
+                if partial is not None:
+                    self._last_history = partial
+            except Exception:
+                pass
             raise RuntimeError(f"Browser Use agent failed: {exc}") from exc
+        finally:
+            self._current_agent = None
 
         self._last_history = history
         return self._convert_history(history)
@@ -279,30 +313,61 @@ class BrowserUseBackend:
         )
 
     async def _on_step_end(self, agent: Any) -> None:
-        """Async hook for real-time stuck detection during agent.run().
+        """Async hook fired after each browser-use step.
 
-        Exact port from executor.py::_on_step_end (line 484).
+        Does two things:
+        1. Real-time stuck detection (exact port from executor.py::_on_step_end).
+        2. Live streaming: converts any newly-completed steps into
+           ``StepResult`` objects and forwards them to
+           ``self._live_step_callback`` so PAV / tasks.py sees partial
+           progress BEFORE ``agent.run()`` returns. This matters for
+           long-running delegations that get killed by Celery's
+           ``soft_time_limit`` — without streaming, ``shared_steps``
+           would be empty at the outer exception handler.
         """
+        # --- 1. Stuck detection ---
         try:
-            history = getattr(agent, "history", None)
-            if not history:
-                return
-            latest = history[-1] if isinstance(history, list) else None
-            if latest is None:
-                return
-            signal = self._stuck_detector.check_agent_step(latest)
-            if signal.detected:
-                logger.warning(
-                    "Stuck agent detected: reason=%s step=%d details=%s",
-                    signal.reason,
-                    signal.step_number,
-                    signal.details,
-                )
-                stop_fn = getattr(agent, "stop", None)
-                if callable(stop_fn):
-                    stop_fn()
+            history_list = getattr(agent, "history", None)
+            latest = None
+            if isinstance(history_list, list) and history_list:
+                latest = history_list[-1]
+            if latest is not None:
+                signal = self._stuck_detector.check_agent_step(latest)
+                if signal.detected:
+                    logger.warning(
+                        "Stuck agent detected: reason=%s step=%d details=%s",
+                        signal.reason,
+                        signal.step_number,
+                        signal.details,
+                    )
+                    stop_fn = getattr(agent, "stop", None)
+                    if callable(stop_fn):
+                        stop_fn()
         except Exception as exc:
             logger.debug("on_step_end stuck check failed: %s", exc)
+
+        # --- 2. Live streaming of step data ---
+        try:
+            if self._live_step_callback is None:
+                return
+
+            # browser-use exposes agent.history as AgentHistoryList which
+            # wraps .history (a plain list). Convert everything emitted so
+            # far, then forward only the new entries.
+            full_history = getattr(agent, "history", None)
+            if full_history is None:
+                return
+
+            converted = self._convert_history(full_history)
+            new_results = converted[self._emitted_step_count:]
+            for sr in new_results:
+                try:
+                    self._live_step_callback(sr)
+                except Exception as cb_exc:
+                    logger.debug("live step callback failed: %s", cb_exc)
+            self._emitted_step_count = len(converted)
+        except Exception as exc:
+            logger.debug("live streaming failed: %s", exc)
 
     # ------------------------------------------------------------------
     # History conversion (ported from executor.py::_enrich_steps_from_history)
@@ -376,19 +441,26 @@ class BrowserUseBackend:
                     success = False
                     error_msg = str(errors[i])
 
-                # -- Token counts from step metadata --
-                # (exact logic from executor.py lines 664-670)
+                # -- Per-step duration from StepMetadata (browser-use 0.11+) --
+                # Token counts are tracked aggregate on history.usage, not per-step
+                # (see https://github.com/browser-use/browser-use). We attribute
+                # tokens / cost to the last step below.
                 tokens_in = 0
                 tokens_out = 0
                 duration_ms = 0
 
                 meta = getattr(agent_step, "metadata", None)
                 if meta:
-                    tokens_in = getattr(meta, "input_tokens", 0) or 0
-                    tokens_out = getattr(meta, "output_tokens", 0) or 0
-                    step_dur = getattr(meta, "step_duration", None)
-                    if step_dur is not None:
-                        duration_ms = int(step_dur * 1000)
+                    start_t = getattr(meta, "step_start_time", None)
+                    end_t = getattr(meta, "step_end_time", None)
+                    if start_t is not None and end_t is not None:
+                        duration_ms = int((float(end_t) - float(start_t)) * 1000)
+                    # Legacy field (pre-0.11) — keep for forward/backward compat
+                    legacy_in = getattr(meta, "input_tokens", 0) or 0
+                    legacy_out = getattr(meta, "output_tokens", 0) or 0
+                    if legacy_in or legacy_out:
+                        tokens_in = legacy_in
+                        tokens_out = legacy_out
 
                 # Fallback duration from callback timestamps
                 if not duration_ms and i < len(self._step_timestamps):
@@ -427,11 +499,14 @@ class BrowserUseBackend:
                     if eval_prev:
                         side_effects.append(f"eval:{str(eval_prev)[:200]}")
 
-                # Tag last step with final_result and completion status
+                # Tag last step with final_result and completion status.
+                # NOTE: do not truncate — downstream JSON extraction needs
+                # the full payload. browser-use final_result length is
+                # naturally bounded by the LLM's output budget.
                 if i == len(history) - 1:
                     if final_result is not None:
                         side_effects.append(
-                            f"final_result:{str(final_result)[:500]}"
+                            f"final_result:{str(final_result)}"
                         )
                     if is_done is not None:
                         side_effects.append(f"is_done:{is_done}")
@@ -445,6 +520,25 @@ class BrowserUseBackend:
                     observation=observation,
                     side_effects=side_effects,
                 ))
+
+            # -- Aggregate usage (browser-use 0.11+): attribute totals to last step
+            # if per-step attribution wasn't available. history.usage is a
+            # UsageSummary with total_prompt_tokens / total_completion_tokens.
+            # StepResult.cost_cents is a @property computed from tokens, so
+            # setting tokens is sufficient for cost aggregation.
+            usage = getattr(result, "usage", None)
+            if usage and steps:
+                per_step_populated = any(s.tokens_in or s.tokens_out for s in steps)
+                if not per_step_populated:
+                    total_in = int(getattr(usage, "total_prompt_tokens", 0) or 0)
+                    total_out = int(getattr(usage, "total_completion_tokens", 0) or 0)
+                    if total_in or total_out:
+                        from dataclasses import replace
+                        steps[-1] = replace(
+                            steps[-1],
+                            tokens_in=total_in,
+                            tokens_out=total_out,
+                        )
 
         except Exception as exc:
             logger.warning("Failed to convert browser-use history: %s", exc)
@@ -500,3 +594,57 @@ def _safe_call_scalar(obj: Any, method: str) -> Any:
         return fn()
     except Exception:
         return None
+
+
+# ---------------------------------------------------------------------------
+# Dynamic pydantic model for output_schema
+# ---------------------------------------------------------------------------
+
+
+def _schema_dict_to_pydantic_model(schema: dict) -> type:
+    """Convert a user ``output_schema`` dict to a dynamic pydantic BaseModel.
+
+    Input dict shape::
+
+        {"titles": "list[str]", "count": "int", "author": "str"}
+
+    browser-use ``Agent(output_model_schema=...)`` expects a pydantic
+    ``BaseModel`` subclass. We synthesise one at runtime so the Agent's
+    final ``done`` action is forced to return a JSON payload matching the
+    user's requested shape. That payload is what ends up as
+    ``final_result()`` and becomes ``task.result`` downstream.
+    """
+    from typing import Any as _Any
+    from typing import Dict, List
+
+    from pydantic import create_model
+
+    TYPE_MAP: dict[str, _Any] = {
+        "str": str,
+        "string": str,
+        "int": int,
+        "integer": int,
+        "float": float,
+        "number": float,
+        "bool": bool,
+        "boolean": bool,
+        "list": List[_Any],
+        "dict": Dict[str, _Any],
+        "list[str]": List[str],
+        "list[int]": List[int],
+        "list[float]": List[float],
+        "list[bool]": List[bool],
+        "list[dict]": List[Dict[str, _Any]],
+        "dict[str, str]": Dict[str, str],
+        "dict[str, int]": Dict[str, int],
+        "dict[str, any]": Dict[str, _Any],
+    }
+
+    fields: dict[str, tuple[_Any, _Any]] = {}
+    for key, type_str in schema.items():
+        norm = str(type_str).lower().strip().replace(" ", "")
+        python_type = TYPE_MAP.get(norm, _Any)
+        # Default to None so the Agent can still finish if a field is missing
+        fields[key] = (python_type, None)
+
+    return create_model("DynamicTaskOutput", **fields)

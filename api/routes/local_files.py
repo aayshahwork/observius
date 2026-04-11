@@ -17,8 +17,11 @@ logger = structlog.get_logger("api.local_files")
 
 router = APIRouter(prefix="/api/v1/local-files", tags=["Local Files (dev)"])
 
-# Resolve the replays directory relative to the project root
-_REPLAYS_ROOT = Path("replays").resolve()
+# Files are addressed as `replays/{task_id}/step_N.png`, so resolve from the
+# project root (the parent of `replays/`). The path-traversal guard below
+# restricts access to the `replays/` subtree.
+_ROOT = Path(".").resolve()
+_REPLAYS_ROOT = (_ROOT / "replays").resolve()
 
 # Allowed extensions and their MIME types
 _MIME_TYPES = {
@@ -42,9 +45,9 @@ async def serve_local_file(file_path: str) -> FileResponse:
             detail="Invalid file path.",
         )
 
-    # Resolve and validate the path stays within the replays directory
-    requested = (_REPLAYS_ROOT / file_path).resolve()
-    if not str(requested).startswith(str(_REPLAYS_ROOT)):
+    # Resolve relative to project root and keep access inside `replays/`
+    requested = (_ROOT / file_path).resolve()
+    if not str(requested).startswith(str(_REPLAYS_ROOT) + "/") and str(requested) != str(_REPLAYS_ROOT):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied.",
